@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>All-exposure HDR simulator</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 24px auto;
+    max-width: 1100px;
+    color: #222;
+    padding: 0 16px;
+  }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .lede { color: #555; font-size: 14px; margin-bottom: 18px; line-height: 1.5; }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    padding: 16px 18px;
+    background: #f6f7f9;
+    border: 1px solid #e3e5ea;
+    border-radius: 10px;
+    margin-bottom: 14px;
+  }
+  .ctrl { display: flex; flex-direction: column; }
+  .ctrl label { font-weight: 600; font-size: 14px; }
+  .ctrl .hint { font-size: 12px; color: #777; margin: 2px 0 8px; }
+  .ctrl input[type=range] { width: 100%; }
+  .ctrl .value {
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    color: #1a1a1a;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: #fff0d6;
+    color: #8a5a00;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .presets {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin: 6px 0 16px;
+  }
+  .presets button {
+    font: inherit;
+    padding: 6px 12px;
+    border: 1px solid #c8ccd4;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .presets button:hover { background: #eef1f6; }
+  #plot, #plot-hdr { width: 100%; height: 420px; }
+  .plots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+  .panel { display: flex; flex-direction: column; }
+  .panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 10px 0 0;
+    color: #333;
+    text-align: center;
+  }
+  .panel-tip {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.5;
+    margin: 8px 2px 0;
+  }
+  .hdr-status {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    border: 1px solid transparent;
+    line-height: 1.4;
+  }
+  .hdr-status[data-level="good"]        { background: #e7f5ec; color: #1e6e34; border-color: #b5dec3; }
+  .hdr-status[data-level="compromised"] { background: #fff4e0; color: #92580a; border-color: #f0d199; }
+  .hdr-status[data-level="dead"]        { background: #fdecea; color: #b03a2e; border-color: #ebbcb6; }
+  @media (max-width: 880px) {
+    .plots { grid-template-columns: 1fr; }
+  }
+  .tip { font-size: 13px; color: #555; margin-top: 12px; line-height: 1.55; }
+  .tip ul { padding-left: 20px; margin: 6px 0; }
+  .tip code { background: #f0f1f4; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1>All-exposure overlay simulator</h1>
+<p class="lede">
+  Toy forward model of the All-Exposures view from the Jess instrument (Compass software).
+  Each curve is one exposure (1, 2, 4, &hellip;, 512&nbsp;s) plotted as <em>counts / sec</em>
+  (<strong>arbitrary units</strong> &mdash; only the relative shape between curves matters here).
+</p>
+<p class="lede">
+  What we actually care about is <strong>how much target is in the capillary</strong>; counts/sec is
+  the proxy via the chain: <em>more target &rarr; (primary in excess) more bound primary &rarr;
+  (secondary in excess) more HRP &rarr; (with abundant substrate and the camera in its linear range)
+  proportionally more counts/sec</em>.
+</p>
+<p class="lede">
+  When substrate runs low, the HRP slows mid-exposure, so long exposures report a lower per-sec than short ones.
+  If only the very long frames drop, no harm done &mdash; the short ones still quantify faithfully.
+  But once even the 2&nbsp;s reads below the 1&nbsp;s, we&rsquo;re in <strong>burnout</strong>:
+  at that point we can&rsquo;t even trust the 1&nbsp;s exposure to reflect target amount.
+</p>
+
+<div class="controls">
+  <div class="ctrl">
+    <label>Sample concentration</label>
+    <div class="hint">How much target is in the capillary. The thing we&rsquo;re trying to quantify.</div>
+    <input id="conc" type="range" min="-1" max="4" step="0.04" value="0">
+    <div class="value">&times;<span id="conc-val">1.00</span></div>
+  </div>
+  <div class="ctrl">
+    <label>Substrate reserves <span class="badge">hypothetical</span></label>
+    <div class="hint">
+      &ldquo;What if we had more substrate?&rdquo; &mdash; you <strong>can&rsquo;t</strong> actually do this
+      on the bench. The real options when burnt out are: <strong>dilute the sample</strong>,
+      or switch to <strong>NIR</strong>.
+    </div>
+    <input id="subst" type="range" min="-0.5" max="1.5" step="0.02" value="0">
+    <div class="value">&times;<span id="subst-val">1.00</span></div>
+  </div>
+</div>
+
+<div class="presets">
+  <button data-preset="reset">Perfect</button>
+  <button data-preset="burnout">Burnout &times;50</button>
+  <button data-preset="drowned">Burnout &times;1000</button>
+  <button data-preset="drowned2">Burnout &times;10000</button>
+</div>
+
+<div class="plots">
+  <div class="panel">
+    <div id="plot"></div>
+    <div class="panel-title">All-exposures overlay (per second, a.u.)</div>
+  </div>
+  <div class="panel">
+    <div id="plot-hdr"></div>
+    <div id="hdr-status" class="hdr-status" data-level="good">&hellip;</div>
+  </div>
+</div>
+
+
+<script>
+const STD_STACK = [1, 2, 4, 8, 16, 32, 64, 128, 512];
+const PEAK_KDA = 46;
+const PEAK_SIGMA = 1.5;
+const XMIN = 30, XMAX = 60;
+const TAU0 = 100;  // baseline burnout time constant when C=R=1, in seconds
+const NOISE_SCALE = 0.13;  // tuning factor for visible noise on short exposures
+const BG = 0.4;            // background rate (noise floor away from peak)
+
+// Per-second velocity at the peak as a function of exposure T,
+// given concentration C (sets V_max-limited rate) and substrate reserve R.
+//   Linear regime  (T << tau): per-sec -> C        (enzyme at V_max, substrate irrelevant)
+//   Burnout regime (T >> tau): per-sec -> TAU0 * R / T   (substrate-limited, C drops out)
+// where tau = TAU0 * R / C is the burnout timescale.
+// Derived from N(T) = R * (1 - exp(-C*T / (TAU0*R)))  (substrate consumed up to its reserve).
+function perSecond(T, C, R) {
+  const u = C * T / (TAU0 * R);
+  if (u < 1e-9) return C;
+  return C * (1 - Math.exp(-u)) / u;
+}
+
+function buildXs() {
+  const xs = [];
+  for (let k = XMIN; k <= XMAX; k = Math.round((k + 0.1) * 10) / 10) xs.push(k);
+  return xs;
+}
+const XS = buildXs();
+
+// Cool-to-warm palette so the eye sorts long-vs-short at a glance
+const PALETTE = [
+  "#111111", "#1f3a93", "#1f77b4", "#17becf", "#2ca02c",
+  "#bcbd22", "#ff7f0e", "#d62728", "#8c564b", "#9467bd"
+];
+
+const state = { C: 1, R: 1, noiseMult: 0.1, bgMult: 1 };
+
+function gaussian(k) {
+  const dx = k - PEAK_KDA;
+  return Math.exp(-(dx * dx) / (2 * PEAK_SIGMA * PEAK_SIGMA));
+}
+
+function fmtExp(T) {
+  if (T < 1) return T.toFixed(2) + " s";
+  return T + " s";
+}
+
+// Pre-baked Gaussian noise so curves don't dance when sliders are still.
+// Shot noise per-sec std at a point with rate r over exposure T: sqrt((r + BG) / T) * NOISE_SCALE.
+function randn() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+const NOISE_MAIN = STD_STACK.map(() => XS.map(() => randn()));
+
+function noiseStd(rate, T) {
+  return Math.sqrt(Math.max(rate + BG * state.bgMult, 0) / T) * NOISE_SCALE * state.noiseMult;
+}
+
+// HDR weight: smooth ramp from 0 -> 1 as an exposure's per-sec ratio (vs 1 s)
+// goes from 0.95 -> 0.99. This kills the threshold-jump artefact when sliding
+// substrate up: exposures fade into the pool gradually instead of popping in.
+function fineWeight(ratio) {
+  const t = Math.max(0, Math.min(1, (ratio - 0.95) / 0.04));
+  return t * t * (3 - 2 * t);
+}
+
+function hdrStatusInfo(C, R, weights) {
+  const r1 = perSecond(1, C, R);
+  const fidelity = r1 / C;
+  const effN = weights.reduce((a, b) => a + b, 0);
+  let lastIdx = 0;
+  for (let i = STD_STACK.length - 1; i >= 0; i--) {
+    if (weights[i] > 0.5) { lastIdx = i; break; }
+  }
+  const bestT = STD_STACK[lastIdx];
+
+  if (fidelity < 0.85) {
+    return {
+      level: "dead",
+      html: `<strong>HDR dead.</strong> Even 1&nbsp;s is burnt (reads ${r1.toFixed(1)} vs target-proportional ${C >= 100 ? C.toFixed(0) : C.toFixed(1)}). The average is pinned to the substrate-limited plateau &mdash; identical for &times;100, &times;1000, &times;10000. Real fix: <strong>dilute</strong> or switch to <strong>NIR</strong>.`
+    };
+  }
+  if (effN < 2.5) {
+    return {
+      level: "compromised",
+      html: `<strong>HDR compromised.</strong> Only ~${effN.toFixed(1)} short exposures pass the fidelity check (up to ${bestT}&nbsp;s) &mdash; long ones rejected for burnout. Composite quantification still ok but noisier.`
+    };
+  }
+  return {
+    level: "good",
+    html: `<strong>HDR good.</strong> Effectively averaging ${effN.toFixed(1)} exposures pixel-by-pixel (up to ${bestT}&nbsp;s). Low noise, faithful quantification.`
+  };
+}
+
+function redraw() {
+  const { C, R } = state;
+
+  // Per-exposure noisy curves (reused by both panels)
+  const exposureYs = STD_STACK.map((T, i) => {
+    const h = perSecond(T, C, R);
+    return XS.map((k, j) => {
+      const sig = h * gaussian(k);
+      return sig + NOISE_MAIN[i][j] * noiseStd(sig, T);
+    });
+  });
+
+  // Smooth HDR weights (ratio of per-sec to the 1 s reading)
+  const r1 = perSecond(1, C, R);
+  const weights = STD_STACK.map(T => fineWeight(perSecond(T, C, R) / r1));
+  const W = weights.reduce((a, b) => a + b, 0) || 1;
+
+  // Pixel-wise weighted average across the "fine" exposures
+  const hdrYs = XS.map((_, j) => {
+    let sum = 0;
+    for (let i = 0; i < STD_STACK.length; i++) {
+      if (weights[i] <= 0) continue;
+      sum += weights[i] * exposureYs[i][j];
+    }
+    return sum / W;
+  });
+
+  // Shared y-range so both panels read on the same scale
+  let ymax = 0;
+  for (const ys of exposureYs) for (const v of ys) if (v > ymax) ymax = v;
+  for (const v of hdrYs) if (v > ymax) ymax = v;
+  ymax = Math.max(ymax * 1.05, 1e-4);
+  const yrange = [0, ymax];
+
+  // --- Left panel: all-exposures overlay ---
+  const mainTraces = STD_STACK.map((T, i) => ({
+    x: XS,
+    y: exposureYs[i],
+    mode: "lines",
+    name: fmtExp(T),
+    line: { width: 1.6, color: PALETTE[i % PALETTE.length] }
+  }));
+  const mainLayout = {
+    margin: { t: 36, l: 64, r: 16, b: 52 },
+    xaxis: { title: "MW (kDa)", range: [XMIN, XMAX], zeroline: false },
+    yaxis: { title: "Counts / second (a.u.)", range: yrange },
+    legend: { title: { text: "exposure" }, x: 1, xanchor: "right", y: 1, bgcolor: "rgba(255,255,255,0.85)" },
+    hovermode: "x unified",
+    plot_bgcolor: "white"
+  };
+  Plotly.react("plot", mainTraces, mainLayout, { responsive: true, displayModeBar: false });
+
+  // --- Right panel: HDR composite ---
+  const hdrTrace = {
+    x: XS,
+    y: hdrYs,
+    mode: "lines",
+    line: { width: 1.8, color: "#1f77b4" },
+    name: "HDR composite",
+    hovertemplate: "%{x:.1f} kDa<br>%{y:.2f} counts/s<extra></extra>"
+  };
+  const hdrLayout = {
+    margin: { t: 36, l: 64, r: 16, b: 52 },
+    xaxis: { title: "MW (kDa)", range: [XMIN, XMAX], zeroline: false },
+    yaxis: { title: "Counts / second (HDR, a.u.)", range: yrange },
+    showlegend: false,
+    plot_bgcolor: "white",
+    hovermode: "x"
+  };
+  Plotly.react("plot-hdr", [hdrTrace], hdrLayout, { responsive: true, displayModeBar: false });
+
+  const status = hdrStatusInfo(C, R, weights);
+  const el = document.getElementById("hdr-status");
+  el.innerHTML = status.html;
+  el.dataset.level = status.level;
+}
+
+function bindSlider(id, transform, key, format) {
+  const slider = document.getElementById(id);
+  const out = document.getElementById(id + "-val");
+  function sync() {
+    const v = transform(parseFloat(slider.value));
+    state[key] = v;
+    out.textContent = format(v);
+    redraw();
+  }
+  slider.addEventListener("input", sync);
+  sync();
+}
+
+function setSliderFromValue(id, transform, rawTarget) {
+  // Inverse of bindSlider's transform isn't always available;
+  // here transforms are 10^v or identity, so we can solve.
+  const slider = document.getElementById(id);
+  let raw;
+  if (transform === idn) raw = rawTarget;
+  else raw = Math.log10(rawTarget);
+  slider.value = raw;
+  slider.dispatchEvent(new Event("input"));
+}
+
+const idn = v => v;
+const log10pow = v => Math.pow(10, v);
+
+bindSlider("conc", log10pow, "C", v => v >= 100 ? v.toFixed(0) : v.toFixed(2));
+bindSlider("subst", log10pow, "R", v => v.toFixed(2));
+
+const PRESETS = {
+  reset:    { C: 1,     R: 1 },
+  burnout:  { C: 50,    R: 1 },
+  drowned:  { C: 1000,  R: 1 },
+  drowned2: { C: 10000, R: 1 }
+};
+
+document.querySelectorAll(".presets button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const p = PRESETS[btn.dataset.preset];
+    if (!p) return;
+    setSliderFromValue("conc",  log10pow, p.C);
+    setSliderFromValue("subst", log10pow, p.R);
+  });
+});
+</script>
+
+</body>
+</html>
