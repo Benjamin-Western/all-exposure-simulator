@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Standard curve simulator</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 24px auto;
+    max-width: 1200px;
+    color: #222;
+    padding: 0 16px;
+  }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .lede { color: #555; font-size: 14px; margin-bottom: 14px; line-height: 1.5; }
+  .nav-link {
+    display: inline-block;
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: #1f77b4;
+    text-decoration: none;
+  }
+  .nav-link:hover { text-decoration: underline; }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    padding: 16px 18px;
+    background: #f6f7f9;
+    border: 1px solid #e3e5ea;
+    border-radius: 10px;
+    margin-bottom: 14px;
+  }
+  .ctrl { display: flex; flex-direction: column; }
+  .ctrl label { font-weight: 600; font-size: 14px; }
+  .ctrl .hint { font-size: 12px; color: #777; margin: 2px 0 8px; }
+  .ctrl input[type=range] { width: 100%; }
+  .ctrl .value {
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    color: #1a1a1a;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: #fff0d6;
+    color: #8a5a00;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 16px; }
+  .presets button {
+    font: inherit;
+    padding: 6px 12px;
+    border: 1px solid #c8ccd4;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .presets button:hover { background: #eef1f6; }
+  #curve-plot { width: 100%; height: 460px; margin-bottom: 14px; }
+  .legend-row {
+    display: flex;
+    gap: 18px;
+    font-size: 12px;
+    color: #555;
+    margin: 6px 4px 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .legend-row .swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .samples-grid { display: flex; flex-direction: column; gap: 6px; }
+  .sample-row {
+    display: grid;
+    grid-template-columns: 130px 1fr 1fr;
+    gap: 10px;
+    align-items: stretch;
+    padding: 8px 10px;
+    background: #fafbfc;
+    border-radius: 6px;
+    border-left: 5px solid transparent;
+  }
+  .sample-row[data-status="good"]        { border-left-color: #2ca02c; }
+  .sample-row[data-status="compromised"] { border-left-color: #ff7f0e; }
+  .sample-row[data-status="dead"]        { border-left-color: #d62728; }
+  .sample-label {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+  }
+  .sample-num { font-weight: 600; color: #222; }
+  .sample-conc { color: #555; font-variant-numeric: tabular-nums; font-size: 12px; margin-top: 2px; }
+  .sample-status-text { font-size: 11px; margin-top: 4px; color: #888; }
+  .mini-pair { display: flex; flex-direction: column; min-width: 0; }
+  .mini-plot-header {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .mini-plot { width: 100%; height: 130px; }
+</style>
+</head>
+<body>
+
+<h1>Standard curve simulator <span style="color:#888;font-size:14px;font-weight:normal">(level 2)</span></h1>
+<p class="lede">
+  Six samples in a 1:2 serial dilution. Slide the top-standard concentration and watch the standard curve.
+  As long as every sample stays in the linear range, the points sit on the theoretical line.
+  Once a sample crosses into burnout, it is <strong>underestimated</strong> &mdash; it falls visibly below
+  the line. Burnt samples lie, period.
+</p>
+<a class="nav-link" href="index.html">&larr; back to single-sample simulator</a>
+
+<div class="controls">
+  <div class="ctrl">
+    <label>Top standard concentration</label>
+    <div class="hint">Sample 1 (top). Samples 2&hellip;6 are 1:2 dilutions of this.</div>
+    <input id="conc" type="range" min="-1" max="4" step="0.04" value="2">
+    <div class="value">&times;<span id="conc-val">100</span></div>
+  </div>
+  <div class="ctrl">
+    <label>Substrate reserves <span class="badge">hypothetical</span></label>
+    <div class="hint">Same caveat as level 1: not adjustable in real life. Real fix is dilute or NIR.</div>
+    <input id="subst" type="range" min="-0.5" max="1.5" step="0.02" value="0">
+    <div class="value">&times;<span id="subst-val">1.00</span></div>
+  </div>
+</div>
+
+<div class="presets">
+  <button data-preset="all-linear">All linear (top &times;1)</button>
+  <button data-preset="top-burnt">Top samples burnt (top &times;100)</button>
+  <button data-preset="all-burnt">Everything burnt (top &times;10000)</button>
+</div>
+
+<div id="curve-plot"></div>
+
+<div class="legend-row">
+  <span><span class="swatch" style="background:#2ca02c"></span>Trustworthy (faithful)</span>
+  <span><span class="swatch" style="background:#ff7f0e"></span>Quantitative but noisy (short exposures only)</span>
+  <span><span class="swatch" style="background:#d62728"></span>Burnt &mdash; underestimated</span>
+</div>
+
+<div class="samples-grid"></div>
+
+<script>
+// === MODEL (mirrors index.html) ===
+const STD_STACK = [1, 2, 4, 8, 16, 32, 64, 128, 512];
+const PEAK_KDA = 46;
+const PEAK_SIGMA = 1.5;
+const XMIN = 30, XMAX = 60;
+const TAU0 = 100;
+const NOISE_SCALE = 0.13;
+const BG = 0.4;
+const NOISE_MULT = 0.1;
+const BG_MULT = 1;
+
+const N_SAMPLES = 6;
+const DILUTION = 2;
+const PEAK_INT_LO = 42, PEAK_INT_HI = 50;
+
+function buildXs() {
+  const xs = [];
+  for (let k = XMIN; k <= XMAX; k = Math.round((k + 0.1) * 10) / 10) xs.push(k);
+  return xs;
+}
+const XS = buildXs();
+
+function perSecond(T, C, R) {
+  const u = C * T / (TAU0 * R);
+  if (u < 1e-9) return C;
+  return C * (1 - Math.exp(-u)) / u;
+}
+
+function gaussian(k) {
+  const dx = k - PEAK_KDA;
+  return Math.exp(-(dx * dx) / (2 * PEAK_SIGMA * PEAK_SIGMA));
+}
+
+function fineWeight(ratio) {
+  const t = Math.max(0, Math.min(1, (ratio - 0.95) / 0.04));
+  return t * t * (3 - 2 * t);
+}
+
+function randn() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function noiseStd(rate, T) {
+  return Math.sqrt(Math.max(rate + BG * BG_MULT, 0) / T) * NOISE_SCALE * NOISE_MULT;
+}
+
+const PALETTE = ["#111111", "#1f3a93", "#1f77b4", "#17becf", "#2ca02c",
+                 "#bcbd22", "#ff7f0e", "#d62728", "#8c564b"];
+
+// One independent noise realization per sample (capillary)
+const SAMPLE_NOISE = Array.from({ length: N_SAMPLES }, () =>
+  STD_STACK.map(() => XS.map(() => randn()))
+);
+
+// Theoretical peak-area for unit concentration (numerical integration of the
+// Gaussian over [PEAK_INT_LO, PEAK_INT_HI] at dk = 0.1) — used as the slope
+// of the dashed reference line in the standard-curve plot.
+let LINEAR_SLOPE = 0;
+for (let j = 0; j < XS.length; j++) {
+  if (XS[j] >= PEAK_INT_LO && XS[j] <= PEAK_INT_HI) {
+    LINEAR_SLOPE += gaussian(XS[j]) * 0.1;
+  }
+}
+
+function computeSample(sampleIdx, C, R) {
+  const exposureYs = STD_STACK.map((T, i) => {
+    const h = perSecond(T, C, R);
+    return XS.map((k, j) => {
+      const sig = h * gaussian(k);
+      return sig + SAMPLE_NOISE[sampleIdx][i][j] * noiseStd(sig, T);
+    });
+  });
+
+  const r1 = perSecond(1, C, R);
+  const weights = STD_STACK.map(T => fineWeight(perSecond(T, C, R) / r1));
+  const W = weights.reduce((a, b) => a + b, 0) || 1;
+
+  const hdrYs = XS.map((_, j) => {
+    let sum = 0;
+    for (let i = 0; i < STD_STACK.length; i++) {
+      if (weights[i] <= 0) continue;
+      sum += weights[i] * exposureYs[i][j];
+    }
+    return sum / W;
+  });
+
+  let area = 0;
+  for (let j = 0; j < XS.length; j++) {
+    if (XS[j] >= PEAK_INT_LO && XS[j] <= PEAK_INT_HI) {
+      area += hdrYs[j] * 0.1;
+    }
+  }
+
+  const fidelity = r1 / C;
+  const effN = W;
+  let status;
+  if (fidelity < 0.85) status = "dead";
+  else if (effN < 2.5) status = "compromised";
+  else status = "good";
+
+  return { exposureYs, hdrYs, area, status, C };
+}
+
+function statusColor(s) {
+  return { good: "#2ca02c", compromised: "#ff7f0e", dead: "#d62728" }[s];
+}
+
+function fmtC(c) {
+  if (c >= 100) return c.toFixed(0);
+  if (c >= 10) return c.toFixed(1);
+  if (c >= 1) return c.toFixed(2);
+  return c.toFixed(3);
+}
+
+function setupGrid() {
+  const grid = document.querySelector(".samples-grid");
+  let html = "";
+  for (let i = 0; i < N_SAMPLES; i++) {
+    html += `
+      <div class="sample-row" id="row-${i}" data-status="good">
+        <div class="sample-label">
+          <div class="sample-num">Sample ${i + 1}${i === 0 ? " (top)" : ""}</div>
+          <div class="sample-conc">true &times;<span id="conc-label-${i}">&hellip;</span></div>
+          <div class="sample-status-text" id="status-text-${i}">&hellip;</div>
+        </div>
+        <div class="mini-pair">
+          <div class="mini-plot-header">All-exposures</div>
+          <div id="all-exp-${i}" class="mini-plot"></div>
+        </div>
+        <div class="mini-pair">
+          <div class="mini-plot-header">HDR composite</div>
+          <div id="hdr-${i}" class="mini-plot"></div>
+        </div>
+      </div>
+    `;
+  }
+  grid.innerHTML = html;
+}
+setupGrid();
+
+const state = { C0: 100, R: 1 };
+
+function drawStandardCurve(samples) {
+  const xs = samples.map(s => s.C);
+  const ys = samples.map(s => s.area);
+  const colors = samples.map(s => statusColor(s.status));
+  const labels = samples.map((s, i) =>
+    `Sample ${i + 1}<br>True: &times;${fmtC(s.C)}<br>Measured area: ${fmtC(s.area)}<br>${s.status}`
+  );
+
+  const xMin = Math.min(...xs) * 0.5;
+  const xMax = Math.max(...xs) * 2;
+
+  const refTrace = {
+    x: [xMin, xMax],
+    y: [LINEAR_SLOPE * xMin, LINEAR_SLOPE * xMax],
+    mode: "lines",
+    name: "Theoretical linear",
+    line: { width: 1.5, color: "#888", dash: "dash" },
+    hoverinfo: "skip"
+  };
+
+  const measuredTrace = {
+    x: xs,
+    y: ys.map(v => Math.max(v, 1e-6)),  // log axis safety
+    mode: "markers",
+    name: "Measured (HDR peak area)",
+    marker: {
+      size: 14,
+      color: colors,
+      line: { color: "#222", width: 1 }
+    },
+    text: labels,
+    hovertemplate: "%{text}<extra></extra>"
+  };
+
+  const layout = {
+    margin: { t: 36, l: 64, r: 16, b: 56 },
+    xaxis: {
+      title: "True concentration (&times;, slider units)",
+      type: "log",
+      autorange: true
+    },
+    yaxis: {
+      title: "Measured peak area (a.u.)",
+      type: "log",
+      autorange: true
+    },
+    title: { text: "Standard curve (log-log)", font: { size: 16 } },
+    legend: { x: 0.02, xanchor: "left", y: 0.98, bgcolor: "rgba(255,255,255,0.85)" },
+    plot_bgcolor: "white",
+    hovermode: "closest"
+  };
+
+  Plotly.react("curve-plot", [refTrace, measuredTrace], layout,
+    { responsive: true, displayModeBar: false });
+}
+
+function drawMiniAll(sampleIdx, data, yrange) {
+  const traces = STD_STACK.map((T, i) => ({
+    x: XS, y: data.exposureYs[i], mode: "lines",
+    line: { width: 1.2, color: PALETTE[i] },
+    hoverinfo: "skip"
+  }));
+  const layout = {
+    margin: { t: 4, l: 40, r: 6, b: 26 },
+    xaxis: { range: [XMIN, XMAX], tickfont: { size: 9 }, zeroline: false },
+    yaxis: { range: yrange, tickfont: { size: 9 } },
+    showlegend: false, plot_bgcolor: "white"
+  };
+  Plotly.react(`all-exp-${sampleIdx}`, traces, layout,
+    { responsive: true, displayModeBar: false });
+}
+
+function drawMiniHDR(sampleIdx, data, yrange) {
+  const trace = {
+    x: XS, y: data.hdrYs, mode: "lines",
+    line: { width: 1.6, color: "#1f77b4" },
+    hoverinfo: "skip"
+  };
+  const layout = {
+    margin: { t: 4, l: 40, r: 6, b: 26 },
+    xaxis: { range: [XMIN, XMAX], tickfont: { size: 9 }, zeroline: false },
+    yaxis: { range: yrange, tickfont: { size: 9 } },
+    showlegend: false, plot_bgcolor: "white"
+  };
+  Plotly.react(`hdr-${sampleIdx}`, [trace], layout,
+    { responsive: true, displayModeBar: false });
+}
+
+const STATUS_TEXT = {
+  good:         "trustworthy",
+  compromised:  "noisy",
+  dead:         "burnt &mdash; underestimated"
+};
+
+function redraw() {
+  const { C0, R } = state;
+  const concentrations = Array.from({ length: N_SAMPLES }, (_, i) => C0 / Math.pow(DILUTION, i));
+  const samples = concentrations.map((C, i) => computeSample(i, C, R));
+
+  samples.forEach((s, i) => {
+    document.getElementById(`conc-label-${i}`).textContent = fmtC(s.C);
+    document.getElementById(`row-${i}`).dataset.status = s.status;
+    document.getElementById(`status-text-${i}`).innerHTML = STATUS_TEXT[s.status];
+  });
+
+  let ymax = 0;
+  for (const s of samples) {
+    for (const ys of s.exposureYs) for (const v of ys) if (v > ymax) ymax = v;
+    for (const v of s.hdrYs) if (v > ymax) ymax = v;
+  }
+  ymax = Math.max(ymax * 1.05, 1e-4);
+  const yrange = [0, ymax];
+
+  drawStandardCurve(samples);
+  samples.forEach((s, i) => {
+    drawMiniAll(i, s, yrange);
+    drawMiniHDR(i, s, yrange);
+  });
+}
+
+function bindSlider(id, transform, key, format) {
+  const slider = document.getElementById(id);
+  const out = document.getElementById(id + "-val");
+  function sync() {
+    const v = transform(parseFloat(slider.value));
+    state[key] = v;
+    out.textContent = format(v);
+    redraw();
+  }
+  slider.addEventListener("input", sync);
+  sync();
+}
+
+function setSliderFromValue(id, transform, target) {
+  const slider = document.getElementById(id);
+  const raw = transform === idn ? target : Math.log10(target);
+  slider.value = raw;
+  slider.dispatchEvent(new Event("input"));
+}
+
+const idn = v => v;
+const log10pow = v => Math.pow(10, v);
+
+bindSlider("conc",  log10pow, "C0", v => v >= 100 ? v.toFixed(0) : v.toFixed(2));
+bindSlider("subst", log10pow, "R",  v => v.toFixed(2));
+
+const PRESETS = {
+  "all-linear": { C0: 1,     R: 1 },
+  "top-burnt":  { C0: 100,   R: 1 },
+  "all-burnt":  { C0: 10000, R: 1 }
+};
+
+document.querySelectorAll(".presets button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const p = PRESETS[btn.dataset.preset];
+    if (!p) return;
+    setSliderFromValue("conc",  log10pow, p.C0);
+    setSliderFromValue("subst", log10pow, p.R);
+  });
+});
+</script>
+
+</body>
+</html>
