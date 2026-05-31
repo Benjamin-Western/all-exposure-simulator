@@ -66,6 +66,24 @@
     cursor: pointer;
   }
   .presets button:hover { background: #eef1f6; }
+  .axis-toggle {
+    display: flex;
+    gap: 0;
+    margin: 0 0 6px;
+    font-size: 12px;
+  }
+  .axis-toggle button {
+    font: inherit;
+    padding: 4px 10px;
+    border: 1px solid #c8ccd4;
+    background: white;
+    cursor: pointer;
+    color: #555;
+  }
+  .axis-toggle button:first-child { border-radius: 6px 0 0 6px; }
+  .axis-toggle button:last-child  { border-radius: 0 6px 6px 0; border-left: 0; }
+  .axis-toggle button.active { background: #1f77b4; color: white; border-color: #1f77b4; }
+  .axis-toggle button:not(.active):hover { background: #eef1f6; }
   #curve-plot { width: 100%; height: 460px; margin-bottom: 14px; }
   .legend-row {
     display: flex;
@@ -151,6 +169,11 @@
   <button data-preset="all-burnt">Everything burnt (top &times;10000)</button>
 </div>
 
+<div class="axis-toggle">
+  <span style="align-self:center;margin-right:8px;color:#666;">Axes:</span>
+  <button class="active" data-axis="log">Log&ndash;log</button>
+  <button data-axis="linear">Linear</button>
+</div>
 <div id="curve-plot"></div>
 
 <div class="legend-row">
@@ -305,7 +328,7 @@ function setupGrid() {
 }
 setupGrid();
 
-const state = { C0: 100, R: 1 };
+const state = { C0: 100, R: 1, axisType: "log" };
 
 function drawStandardCurve(samples) {
   const xs = samples.map(s => s.C);
@@ -315,12 +338,14 @@ function drawStandardCurve(samples) {
     `Sample ${i + 1}<br>True: &times;${fmtC(s.C)}<br>Measured area: ${fmtC(s.area)}<br>${s.status}`
   );
 
-  const xMin = Math.min(...xs) * 0.5;
-  const xMax = Math.max(...xs) * 2;
+  const isLog = state.axisType === "log";
+  const xMin = isLog ? Math.min(...xs) * 0.5 : 0;
+  const xMax = Math.max(...xs) * (isLog ? 2 : 1.1);
 
+  const refX = isLog ? [Math.min(...xs) * 0.5, xMax] : [xMin, xMax];
   const refTrace = {
-    x: [xMin, xMax],
-    y: [LINEAR_SLOPE * xMin, LINEAR_SLOPE * xMax],
+    x: refX,
+    y: refX.map(x => LINEAR_SLOPE * x),
     mode: "lines",
     name: "Theoretical linear",
     line: { width: 1.5, color: "#888", dash: "dash" },
@@ -329,7 +354,7 @@ function drawStandardCurve(samples) {
 
   const measuredTrace = {
     x: xs,
-    y: ys.map(v => Math.max(v, 1e-6)),  // log axis safety
+    y: isLog ? ys.map(v => Math.max(v, 1e-6)) : ys,
     mode: "markers",
     name: "Measured (HDR peak area)",
     marker: {
@@ -345,15 +370,17 @@ function drawStandardCurve(samples) {
     margin: { t: 36, l: 64, r: 16, b: 56 },
     xaxis: {
       title: "True concentration (&times;, slider units)",
-      type: "log",
-      autorange: true
+      type: isLog ? "log" : "linear",
+      autorange: true,
+      rangemode: isLog ? "normal" : "tozero"
     },
     yaxis: {
       title: "Measured peak area (a.u.)",
-      type: "log",
-      autorange: true
+      type: isLog ? "log" : "linear",
+      autorange: true,
+      rangemode: isLog ? "normal" : "tozero"
     },
-    title: { text: "Standard curve (log-log)", font: { size: 16 } },
+    title: { text: "Standard curve", font: { size: 16 } },
     legend: { x: 0.02, xanchor: "left", y: 0.98, bgcolor: "rgba(255,255,255,0.85)" },
     plot_bgcolor: "white",
     hovermode: "closest"
@@ -465,6 +492,15 @@ document.querySelectorAll(".presets button").forEach(btn => {
     if (!p) return;
     setSliderFromValue("conc",  log10pow, p.C0);
     setSliderFromValue("subst", log10pow, p.R);
+  });
+});
+
+document.querySelectorAll(".axis-toggle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    state.axisType = btn.dataset.axis;
+    document.querySelectorAll(".axis-toggle button").forEach(b =>
+      b.classList.toggle("active", b === btn));
+    redraw();
   });
 });
 </script>
