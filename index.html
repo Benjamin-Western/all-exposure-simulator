@@ -101,6 +101,24 @@
   .status-badge[data-level="good"]        { background: #e7f5ec; color: #1e6e34; border-color: #b5dec3; }
   .status-badge[data-level="compromised"] { background: #fff4e0; color: #92580a; border-color: #f0d199; }
   .status-badge[data-level="dead"]        { background: #fdecea; color: #b03a2e; border-color: #ebbcb6; }
+  .takeaway {
+    margin: 28px 0 12px;
+    padding: 14px 18px;
+    background: #f6f7f9;
+    border: 1px solid #e3e5ea;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #444;
+  }
+  .takeaway h2 {
+    font-size: 15px;
+    margin: 0 0 8px;
+    color: #222;
+  }
+  .takeaway p { margin: 0 0 8px; }
+  .takeaway p:last-child { margin-bottom: 0; }
+  .takeaway .next-link { color: #1f77b4; font-weight: 600; }
   @media (max-width: 880px) {
     .plots { grid-template-columns: 1fr; }
   }
@@ -327,21 +345,60 @@ function fineWeight(ratio) {
   return t * t * (3 - 2 * t);
 }
 
-// Status level, matching level 2's thresholds.
-//   HDR mode             — effN bands: >3 good, 2<effN<=3 compromised, <=2 dead.
-//   Single-exposure mode — recovery vs ideal: >=90% good, 70-90% compromised, <70% dead.
+// Status level: take the WORST of the deterministic (burnout / recovery) check
+// and a peak-SNR check, so low-concentration "good" readings drop to
+// compromised / dead when noise dominates the signal.
+//
+//   Deterministic — HDR mode    : effN bands  >3 good, 2<effN<=3 comp, <=2 dead.
+//                   Single mode  : recovery%   >=90 good, 70..90 comp, <70 dead.
+//   SNR (peak)    — both modes   : snr        >=20 good, 5..20 comp, <5 dead.
 function hdrStatusInfo(C, R, weights) {
+  // -- deterministic part --
+  let det;
   if (state.mode === "hdr") {
     const effN = weights.reduce((a, b) => a + b, 0);
-    if (effN <= 2) return "dead";
-    if (effN <= 3) return "compromised";
-    return "good";
+    if (effN <= 2)      det = "dead";
+    else if (effN <= 3) det = "compromised";
+    else                det = "good";
+  } else {
+    const T = MODE_T[state.mode];
+    const rec = C > 0 ? perSecond(T, C, R) / C * 100 : 0;
+    if (rec < 70)       det = "dead";
+    else if (rec < 90)  det = "compromised";
+    else                det = "good";
   }
-  const T = MODE_T[state.mode];
-  const rec = C > 0 ? perSecond(T, C, R) / C * 100 : 0;
-  if (rec < 70) return "dead";
-  if (rec < 90) return "compromised";
-  return "good";
+
+  // -- peak-SNR part --
+  let snr;
+  if (state.mode === "hdr") {
+    let varSum = 0, W = 0;
+    for (let i = 0; i < STD_STACK.length; i++) {
+      const w = weights[i];
+      if (w <= 0) continue;
+      const rate = perSecond(STD_STACK[i], C, R);
+      varSum += w * w * (rate + BG * state.bgMult) / STD_STACK[i];
+      W += w;
+    }
+    const noiseStd = W > 0
+      ? Math.sqrt(varSum) / W * NOISE_SCALE * state.noiseMult
+      : Infinity;
+    const r1 = perSecond(1, C, R);
+    snr = noiseStd > 0 ? r1 / noiseStd : Infinity;
+  } else {
+    const T = MODE_T[state.mode];
+    const rs = perSecond(T, C, R);
+    const noiseStd = Math.sqrt((rs + BG * state.bgMult) / T) * NOISE_SCALE * state.noiseMult;
+    snr = noiseStd > 0 ? rs / noiseStd : Infinity;
+  }
+
+  let snrLevel;
+  if (snr < 5)       snrLevel = "dead";
+  else if (snr < 20) snrLevel = "compromised";
+  else               snrLevel = "good";
+
+  // worst of the two
+  const order = { dead: 0, compromised: 1, good: 2 };
+  return order[snrLevel] < order[det] ? snrLevel : det;
 }
 
 function redraw() {
@@ -494,9 +551,26 @@ document.querySelectorAll(".mode-bar button").forEach(btn => {
 });
 </script>
 
-<p style="text-align:center;margin:32px 0 8px;font-size:14px;">
-  Ready for more? <a href="samples.html" style="color:#1f77b4;">&rarr; Level 2: standard curve with multiple samples</a>
-</p>
+<div class="takeaway">
+  <h2>What this view shows &mdash; and what it doesn&rsquo;t</h2>
+  <p>
+    Everything above &mdash; burnout, noise, the per-exposure trade-offs &mdash; is about
+    <strong>one capillary at one concentration</strong>. The status badge flags whether
+    that single reading is faithful: did the substrate hold, is the peak comfortably above noise.
+  </p>
+  <p>
+    What proves an assay actually <em>quantifies</em> the target is <strong>linearity</strong>:
+    a serial dilution across the working range must land on a straight line. Without that
+    you don&rsquo;t know whether a &ldquo;good&rdquo; reading at &times;1 is still good at
+    &times;0.1 or &times;10. <em>Spike &amp; recovery</em>, parallelism, etc.
+    round out the validation suite if you need the formal proof.
+  </p>
+  <p>
+    <a href="samples.html" class="next-link">&rarr; Level 2: standard curve with six samples</a>
+    runs exactly that linearity check &mdash; same single-capillary mechanics, but with
+    a serial dilution so you can see the points walk off the line at the edges.
+  </p>
+</div>
 
 </main>
 
