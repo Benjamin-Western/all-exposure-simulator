@@ -294,6 +294,21 @@
   </div>
 </div>
 
+<div class="dyn-section">
+  <h2>Dynamic range across exposures</h2>
+  <p class="dyn-hint">
+    For each option (Benji&rsquo;s HDR + the manual single exposures), the colour
+    band shows the status at every concentration on the current substrate setting:
+    <strong style="color:#1e6e34">green&nbsp;= trustworthy</strong>,
+    <strong style="color:#92580a">orange&nbsp;= compromised</strong>,
+    <strong style="color:#b03a2e">red&nbsp;= unreliable</strong>.
+    The dashed line marks the current concentration. Note how HDR&rsquo;s green
+    stripe extends further on both ends than any single exposure &mdash; that is
+    the dynamic-range advantage.
+  </p>
+  <div id="dyn-range" style="height: 240px;"></div>
+</div>
+
 <script>
 const STD_STACK = [1, 2, 4, 8, 16, 32, 64, 128, 512];
 const PEAK_KDA = 46;
@@ -392,14 +407,14 @@ function statusFor(mode, C, R) {
   let det;
   if (mode === "hdr") {
     const rec1s = C > 0 ? r1 / C * 100 : 0;
-    if (rec1s < 80)      det = "dead";
-    else if (rec1s < 95) det = "compromised";
+    if (rec1s < 90)      det = "dead";
+    else if (rec1s < 97) det = "compromised";
     else                 det = "good";
   } else {
     const T = MODE_T[mode];
     const rec = C > 0 ? perSecond(T, C, R) / C * 100 : 0;
-    if (rec < 80)        det = "dead";
-    else if (rec < 95)   det = "compromised";
+    if (rec < 90)        det = "dead";
+    else if (rec < 97)   det = "compromised";
     else                 det = "good";
   }
 
@@ -643,21 +658,6 @@ document.querySelectorAll(".mode-bar button").forEach(btn => {
   });
 });
 </script>
-
-<div class="dyn-section">
-  <h2>Dynamic range across exposures</h2>
-  <p class="dyn-hint">
-    For each option (Benji&rsquo;s HDR + the manual single exposures), the colour
-    band shows the status at every concentration on the current substrate setting:
-    <strong style="color:#1e6e34">green&nbsp;= trustworthy</strong>,
-    <strong style="color:#92580a">orange&nbsp;= compromised</strong>,
-    <strong style="color:#b03a2e">red&nbsp;= unreliable</strong>.
-    The dashed line marks the current concentration. Note how HDR&rsquo;s green
-    stripe extends further on both ends than any single exposure &mdash; that is
-    the dynamic-range advantage.
-  </p>
-  <div id="dyn-range" style="height: 240px;"></div>
-</div>
 
 <div class="takeaway">
   <h2>What this view shows &mdash; and what it doesn&rsquo;t</h2>

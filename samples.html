@@ -431,15 +431,15 @@ function computeSample(sampleIdx, C, R) {
   let status;
   if (state.mode === "hdr") {
     const rec1s = C > 0 ? r1 / C * 100 : 0;
-    if (rec1s < 80) status = "dead";
-    else if (rec1s < 95) status = "compromised";
+    if (rec1s < 90) status = "dead";
+    else if (rec1s < 97) status = "compromised";
     else status = "good";
   } else {
     const ideal = LINEAR_SLOPE * C;
     const measVal = integratePeak(exposureYs[STD_STACK.indexOf(MODE_T[state.mode])]);
     const rec = ideal > 0 ? measVal / ideal * 100 : 0;
-    if (rec < 80) status = "dead";
-    else if (rec < 95) status = "compromised";
+    if (rec < 90) status = "dead";
+    else if (rec < 97) status = "compromised";
     else status = "good";
   }
 
