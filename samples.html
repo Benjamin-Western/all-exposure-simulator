@@ -24,13 +24,16 @@
   .nav-link:hover { text-decoration: underline; }
   .controls {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 14px;
     padding: 8px 12px;
     background: #f6f7f9;
     border: 1px solid #e3e5ea;
     border-radius: 10px;
     margin-bottom: 8px;
+  }
+  @media (max-width: 900px) {
+    .controls { grid-template-columns: 1fr; }
   }
   .ctrl { display: flex; flex-direction: column; }
   .ctrl label { font-weight: 600; font-size: 13px; }
@@ -178,6 +181,12 @@
     <input id="subst" type="range" min="-0.5" max="1.5" step="0.02" value="0">
     <div class="value">&times;<span id="subst-val">1.00</span></div>
   </div>
+  <div class="ctrl">
+    <label>HDR inclusion threshold</label>
+    <div class="hint">Min per-sec ratio (vs 1s) for full HDR inclusion. Smoothstep ramp just below — narrower near 100%, wider at looser thresholds.</div>
+    <input id="thresh" type="range" min="0.80" max="1.00" step="0.01" value="0.95">
+    <div class="value"><span id="thresh-val">90&ndash;95%</span></div>
+  </div>
 </div>
 
 <div class="presets">
@@ -243,8 +252,14 @@ function gaussian(k) {
   return Math.exp(-(dx * dx) / (2 * PEAK_SIGMA * PEAK_SIGMA));
 }
 
+// HDR weight: smoothstep from 0 (at lower) to 1 (at upper).
+// Window width = max(1%, 1 - upper) — narrows as the threshold approaches 100%
+// so strict settings stay tight (e.g. 99-100%) and loose settings get wider.
 function fineWeight(ratio) {
-  const t = Math.max(0, Math.min(1, (ratio - 0.95) / 0.04));
+  const upper = state.thresh;
+  const gap = Math.max(0.01, 1 - upper);
+  const lower = upper - gap;
+  const t = Math.max(0, Math.min(1, (ratio - lower) / gap));
   return t * t * (3 - 2 * t);
 }
 
@@ -308,11 +323,10 @@ function computeSample(sampleIdx, C, R) {
   };
   const area = integratePeak(hdrYs);
 
-  const fidelity = r1 / C;
   const effN = W;
   let status;
-  if (fidelity < 0.85) status = "dead";
-  else if (effN < 2.5) status = "compromised";
+  if (effN <= 2) status = "dead";
+  else if (effN <= 3) status = "compromised";
   else status = "good";
 
   const measured = {
@@ -365,7 +379,7 @@ function setupGrid() {
 }
 setupGrid();
 
-const state = { C0: 100, R: 1, axisType: "log", yScale: "shared" };
+const state = { C0: 100, R: 1, axisType: "log", yScale: "shared", thresh: 0.95 };
 
 function drawStandardCurve(samples) {
   const xs = samples.map(s => s.C);
@@ -585,6 +599,10 @@ const log10pow = v => Math.pow(10, v);
 
 bindSlider("conc",  log10pow, "C0", v => v >= 100 ? v.toFixed(0) : v.toFixed(2));
 bindSlider("subst", log10pow, "R",  v => v.toFixed(2));
+bindSlider("thresh", idn, "thresh", v => {
+  const gap = Math.max(0.01, 1 - v);
+  return `${((v - gap) * 100).toFixed(0)}–${(v * 100).toFixed(0)}%`;
+});
 
 const PRESETS = {
   "all-linear": { C0: 1,     R: 1 },

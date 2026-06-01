@@ -222,16 +222,15 @@ function noiseStd(rate, T) {
 }
 
 // HDR weight: smooth ramp from 0 -> 1 as an exposure's per-sec ratio (vs 1 s)
-// goes from 0.95 -> 0.99. This kills the threshold-jump artefact when sliding
+// goes from 0.90 -> 0.95. This kills the threshold-jump artefact when sliding
 // substrate up: exposures fade into the pool gradually instead of popping in.
 function fineWeight(ratio) {
-  const t = Math.max(0, Math.min(1, (ratio - 0.95) / 0.04));
+  const t = Math.max(0, Math.min(1, (ratio - 0.90) / 0.05));
   return t * t * (3 - 2 * t);
 }
 
 function hdrStatusInfo(C, R, weights) {
   const r1 = perSecond(1, C, R);
-  const fidelity = r1 / C;
   const effN = weights.reduce((a, b) => a + b, 0);
   let lastIdx = 0;
   for (let i = STD_STACK.length - 1; i >= 0; i--) {
@@ -239,16 +238,16 @@ function hdrStatusInfo(C, R, weights) {
   }
   const bestT = STD_STACK[lastIdx];
 
-  if (fidelity < 0.85) {
+  if (effN <= 2) {
     return {
       level: "dead",
-      html: `<strong>HDR dead.</strong> Even 1&nbsp;s is burnt (reads ${r1.toFixed(1)} vs target-proportional ${C >= 100 ? C.toFixed(0) : C.toFixed(1)}). The average is pinned to the substrate-limited plateau &mdash; identical for &times;100, &times;1000, &times;10000. Real fix: <strong>dilute</strong> or switch to <strong>NIR</strong>.`
+      html: `<strong>HDR dead.</strong> effN = ${effN.toFixed(1)} &mdash; essentially just the 1&nbsp;s exposure (reads ${r1.toFixed(1)} vs target-proportional ${C >= 100 ? C.toFixed(0) : C.toFixed(1)}). No longer exposure agrees, so nothing validates the 1&nbsp;s reading. Real fix: <strong>dilute</strong> or switch to <strong>NIR</strong>.`
     };
   }
-  if (effN < 2.5) {
+  if (effN <= 3) {
     return {
       level: "compromised",
-      html: `<strong>HDR compromised.</strong> Only ~${effN.toFixed(1)} short exposures pass the fidelity check (up to ${bestT}&nbsp;s) &mdash; long ones rejected for burnout. Composite quantification still ok but noisier.`
+      html: `<strong>HDR compromised.</strong> Only ~${effN.toFixed(1)} short exposures pass the agreement check (up to ${bestT}&nbsp;s) &mdash; long ones rejected for burnout. Composite quantification still ok but noisier.`
     };
   }
   return {
