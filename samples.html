@@ -188,6 +188,12 @@
 </div>
 <div id="curve-plot"></div>
 
+<div class="axis-toggle" id="yscale-toggle" style="margin: 0 0 10px;">
+  <span style="align-self:center;margin-right:8px;color:#666;">Mini-plot Y-axis:</span>
+  <button class="active" data-yscale="shared">Shared (top sample)</button>
+  <button data-yscale="per-sample">Per-sample auto</button>
+</div>
+
 <div class="legend-row">
   <span><span class="swatch" style="background:#2ca02c"></span>Trustworthy (faithful)</span>
   <span><span class="swatch" style="background:#ff7f0e"></span>Quantitative but noisy (short exposures only)</span>
@@ -340,7 +346,7 @@ function setupGrid() {
 }
 setupGrid();
 
-const state = { C0: 100, R: 1, axisType: "log" };
+const state = { C0: 100, R: 1, axisType: "log", yScale: "shared" };
 
 function drawStandardCurve(samples) {
   const xs = samples.map(s => s.C);
@@ -451,18 +457,25 @@ function redraw() {
     document.getElementById(`status-text-${i}`).innerHTML = STATUS_TEXT[s.status];
   });
 
-  let ymax = 0;
-  for (const s of samples) {
-    for (const ys of s.exposureYs) for (const v of ys) if (v > ymax) ymax = v;
-    for (const v of s.hdrYs) if (v > ymax) ymax = v;
+  const sampleMax = s => {
+    let m = 0;
+    for (const ys of s.exposureYs) for (const v of ys) if (v > m) m = v;
+    for (const v of s.hdrYs) if (v > m) m = v;
+    return Math.max(m * 1.05, 1e-4);
+  };
+
+  let yranges;
+  if (state.yScale === "shared") {
+    const ymax = Math.max(...samples.map(sampleMax));
+    yranges = samples.map(() => [0, ymax]);
+  } else {
+    yranges = samples.map(s => [0, sampleMax(s)]);
   }
-  ymax = Math.max(ymax * 1.05, 1e-4);
-  const yrange = [0, ymax];
 
   drawStandardCurve(samples);
   samples.forEach((s, i) => {
-    drawMiniAll(i, s, yrange);
-    drawMiniHDR(i, s, yrange);
+    drawMiniAll(i, s, yranges[i]);
+    drawMiniHDR(i, s, yranges[i]);
   });
 }
 
@@ -507,12 +520,15 @@ document.querySelectorAll(".presets button").forEach(btn => {
   });
 });
 
-document.querySelectorAll(".axis-toggle button").forEach(btn => {
-  btn.addEventListener("click", () => {
-    state.axisType = btn.dataset.axis;
-    document.querySelectorAll(".axis-toggle button").forEach(b =>
-      b.classList.toggle("active", b === btn));
-    redraw();
+document.querySelectorAll(".axis-toggle").forEach(group => {
+  group.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.axis) state.axisType = btn.dataset.axis;
+      if (btn.dataset.yscale) state.yScale = btn.dataset.yscale;
+      group.querySelectorAll("button").forEach(b =>
+        b.classList.toggle("active", b === btn));
+      redraw();
+    });
   });
 });
 </script>
