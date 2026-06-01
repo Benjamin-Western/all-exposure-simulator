@@ -87,6 +87,20 @@
     line-height: 1.5;
     margin: 8px 2px 0;
   }
+  .status-badge {
+    align-self: center;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 6px 0 0;
+    border: 1px solid transparent;
+  }
+  .status-badge[data-level="good"]        { background: #e7f5ec; color: #1e6e34; border-color: #b5dec3; }
+  .status-badge[data-level="compromised"] { background: #fff4e0; color: #92580a; border-color: #f0d199; }
+  .status-badge[data-level="dead"]        { background: #fdecea; color: #b03a2e; border-color: #ebbcb6; }
   @media (max-width: 880px) {
     .plots { grid-template-columns: 1fr; }
   }
@@ -240,6 +254,7 @@
   <div class="panel">
     <div id="plot-hdr"></div>
     <div class="panel-title" id="hdr-panel-title">Benji&rsquo;s HDR composite (per second, a.u.)</div>
+    <div class="status-badge" id="hdr-status" data-level="good">good</div>
   </div>
 </div>
 
@@ -310,6 +325,23 @@ function noiseStd(rate, T) {
 function fineWeight(ratio) {
   const t = Math.max(0, Math.min(1, (ratio - 0.90) / 0.05));
   return t * t * (3 - 2 * t);
+}
+
+// Status level, matching level 2's thresholds.
+//   HDR mode             — effN bands: >3 good, 2<effN<=3 compromised, <=2 dead.
+//   Single-exposure mode — recovery vs ideal: >=90% good, 70-90% compromised, <70% dead.
+function hdrStatusInfo(C, R, weights) {
+  if (state.mode === "hdr") {
+    const effN = weights.reduce((a, b) => a + b, 0);
+    if (effN <= 2) return "dead";
+    if (effN <= 3) return "compromised";
+    return "good";
+  }
+  const T = MODE_T[state.mode];
+  const rec = C > 0 ? perSecond(T, C, R) / C * 100 : 0;
+  if (rec < 70) return "dead";
+  if (rec < 90) return "compromised";
+  return "good";
 }
 
 function redraw() {
@@ -399,6 +431,11 @@ function redraw() {
 
   document.getElementById("hdr-panel-title").textContent =
     `${rightLabel} (per second, a.u.)`;
+
+  const level = hdrStatusInfo(C, R, weights);
+  const badge = document.getElementById("hdr-status");
+  badge.textContent = level;
+  badge.dataset.level = level;
 }
 
 function bindSlider(id, transform, key, format) {
