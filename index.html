@@ -392,14 +392,14 @@ function statusFor(mode, C, R) {
   let det;
   if (mode === "hdr") {
     const rec1s = C > 0 ? r1 / C * 100 : 0;
-    if (rec1s < 70)      det = "dead";
-    else if (rec1s < 90) det = "compromised";
+    if (rec1s < 80)      det = "dead";
+    else if (rec1s < 95) det = "compromised";
     else                 det = "good";
   } else {
     const T = MODE_T[mode];
     const rec = C > 0 ? perSecond(T, C, R) / C * 100 : 0;
-    if (rec < 70)        det = "dead";
-    else if (rec < 90)   det = "compromised";
+    if (rec < 80)        det = "dead";
+    else if (rec < 95)   det = "compromised";
     else                 det = "good";
   }
 
