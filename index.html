@@ -7,10 +7,15 @@
 <style>
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    margin: 24px auto;
-    max-width: 1100px;
+    margin: 10px;
     color: #222;
-    padding: 0 16px;
+    display: grid;
+    grid-template-columns: 256px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .page-main {
+    min-width: 0;
+    max-width: 1100px;
   }
   h1 { font-size: 22px; margin-bottom: 6px; }
   .lede { color: #555; font-size: 14px; margin-bottom: 18px; line-height: 1.5; }
@@ -100,45 +105,118 @@
   .tip { font-size: 13px; color: #555; margin-top: 12px; line-height: 1.55; }
   .tip ul { padding-left: 20px; margin: 6px 0; }
   .tip code { background: #f0f1f4; padding: 1px 4px; border-radius: 3px; }
+  .sidebar {
+    position: sticky;
+    top: 10px;
+    align-self: start;
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
   .disclaimer-banner {
-    position: fixed;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 180px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     background: #fff4e0;
     border: 1.5px solid #d99c33;
     border-radius: 8px;
     font-size: 11px;
     color: #6a3d00;
-    line-height: 1.5;
-    z-index: 100;
+    line-height: 1.45;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
   }
   .disclaimer-banner strong {
     display: block;
-    font-size: 12.5px;
+    font-size: 12px;
     color: #92580a;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
-  @media (max-width: 1500px) {
-    .disclaimer-banner {
+  .sidebar .controls {
+    grid-template-columns: 1fr;
+    margin-bottom: 0;
+  }
+  .mode-bar {
+    display: flex;
+    gap: 0;
+    font-size: 10px;
+    margin-top: 4px;
+  }
+  .mode-bar button {
+    font: inherit;
+    flex: 1;
+    padding: 3px 4px;
+    border: 1px solid #c8ccd4;
+    background: white;
+    cursor: pointer;
+    color: #555;
+    border-left: 0;
+  }
+  .mode-bar button:first-child { border-radius: 4px 0 0 4px; border-left: 1px solid #c8ccd4; }
+  .mode-bar button:last-child  { border-radius: 0 4px 4px 0; }
+  .mode-bar button.active { background: #1f77b4; color: white; border-color: #1f77b4; }
+  .mode-bar button:not(.active):hover { background: #eef1f6; }
+  @media (max-width: 1080px) {
+    body {
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
       position: static;
-      transform: none;
-      width: auto;
-      margin: 10px auto 14px;
-      max-width: 800px;
+      max-height: none;
+      overflow-y: visible;
+    }
+    .sidebar .controls {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+  @media (max-width: 700px) {
+    .sidebar .controls {
+      grid-template-columns: 1fr;
     }
   }
 </style>
 </head>
 <body>
 
-<div class="disclaimer-banner">
-  <strong>Personal project by Benji</strong>
-  NOT an official Bio-Techne / ProteinSimple tool. &ldquo;Benji&rsquo;s HDR&rdquo; is a toy model built for learning and discussion &mdash; not the real instrument software.
-</div>
+<aside class="sidebar">
+  <div class="disclaimer-banner">
+    <strong>Personal project by Benji</strong>
+    NOT an official Bio-Techne / ProteinSimple tool. &ldquo;Benji&rsquo;s HDR&rdquo; is a toy model built for learning and discussion &mdash; not the real instrument software.
+  </div>
+
+  <div class="controls">
+    <div class="ctrl">
+      <label>Sample concentration</label>
+      <div class="hint">How much target is in the capillary. The thing we&rsquo;re trying to quantify.</div>
+      <input id="conc" type="range" min="-1" max="4" step="0.04" value="0">
+      <div class="value">&times;<span id="conc-val">1.00</span></div>
+    </div>
+    <div class="ctrl">
+      <label>Substrate reserves <span class="badge">hypothetical</span></label>
+      <div class="hint">
+        &ldquo;What if we had more substrate?&rdquo; &mdash; you <strong>can&rsquo;t</strong> actually do this
+        on the bench. The real options when burnt out are: <strong>dilute the sample</strong>,
+        or switch to <strong>NIR</strong>.
+      </div>
+      <input id="subst" type="range" min="-0.5" max="1.5" step="0.02" value="0">
+      <div class="value">&times;<span id="subst-val">1.00</span></div>
+    </div>
+    <div class="ctrl">
+      <label>Right-panel mode</label>
+      <div class="hint">Default Benji&rsquo;s HDR composite, or override with a single exposure to see what one frame alone gives you.</div>
+      <div class="mode-bar">
+        <button class="active" data-mode="hdr">HDR</button>
+        <button data-mode="s1">1s</button>
+        <button data-mode="s2">2s</button>
+        <button data-mode="s4">4s</button>
+        <button data-mode="s8">8s</button>
+        <button data-mode="s16">16s</button>
+        <button data-mode="s32">32s</button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<main class="page-main">
 
 <h1>Benji&rsquo;s All-exposure HDR simulator <span style="color:#888;font-size:14px;font-weight:normal">(level 1)</span></h1>
 <p class="lede">
@@ -159,25 +237,6 @@
   at that point we can&rsquo;t even trust the 1&nbsp;s exposure to reflect target amount.
 </p>
 
-<div class="controls">
-  <div class="ctrl">
-    <label>Sample concentration</label>
-    <div class="hint">How much target is in the capillary. The thing we&rsquo;re trying to quantify.</div>
-    <input id="conc" type="range" min="-1" max="4" step="0.04" value="0">
-    <div class="value">&times;<span id="conc-val">1.00</span></div>
-  </div>
-  <div class="ctrl">
-    <label>Substrate reserves <span class="badge">hypothetical</span></label>
-    <div class="hint">
-      &ldquo;What if we had more substrate?&rdquo; &mdash; you <strong>can&rsquo;t</strong> actually do this
-      on the bench. The real options when burnt out are: <strong>dilute the sample</strong>,
-      or switch to <strong>NIR</strong>.
-    </div>
-    <input id="subst" type="range" min="-0.5" max="1.5" step="0.02" value="0">
-    <div class="value">&times;<span id="subst-val">1.00</span></div>
-  </div>
-</div>
-
 <div class="presets">
   <button data-preset="reset">Perfect</button>
   <button data-preset="burnout">Burnout &times;50</button>
@@ -192,10 +251,10 @@
   </div>
   <div class="panel">
     <div id="plot-hdr"></div>
+    <div class="panel-title" id="hdr-panel-title">Benji&rsquo;s HDR composite (per second, a.u.)</div>
     <div id="hdr-status" class="hdr-status" data-level="good">&hellip;</div>
   </div>
 </div>
-
 
 <script>
 const STD_STACK = [1, 2, 4, 8, 16, 32, 64, 128, 512];
@@ -231,7 +290,19 @@ const PALETTE = [
   "#bcbd22", "#ff7f0e", "#d62728", "#8c564b", "#9467bd"
 ];
 
-const state = { C: 1, R: 1, noiseMult: 0.1, bgMult: 1 };
+const state = { C: 1, R: 1, noiseMult: 0.1, bgMult: 1, mode: "hdr" };
+const MODE_T = { s1: 1, s2: 2, s4: 4, s8: 8, s16: 16, s32: 32 };
+
+// Peak-area normalisation matching computeSample in level 2 — integral of a
+// unit-height Gaussian over the peak window, used for recovery diagnostics
+// when a single exposure is shown on the right panel.
+let LINEAR_SLOPE = 0;
+const PEAK_INT_LO_LVL1 = 42, PEAK_INT_HI_LVL1 = 50;
+for (let j = 0; j < XS.length; j++) {
+  if (XS[j] >= PEAK_INT_LO_LVL1 && XS[j] <= PEAK_INT_HI_LVL1) {
+    LINEAR_SLOPE += gaussian(XS[j]) * 0.1;
+  }
+}
 
 function gaussian(k) {
   const dx = k - PEAK_KDA;
@@ -292,6 +363,29 @@ function hdrStatusInfo(C, R, weights) {
   };
 }
 
+function singleExposureStatus(C, R, T) {
+  const rs = perSecond(T, C, R);
+  const rec = C > 0 ? rs / C * 100 : 0;
+  const trueStr = C >= 100 ? C.toFixed(0) : C.toFixed(1);
+  const recStr = rec.toFixed(0);
+  if (rec >= 90) {
+    return {
+      level: "good",
+      html: `<strong>${T}&nbsp;s exposure faithful.</strong> Recovery ${recStr}% &mdash; reads ${rs.toFixed(1)} vs target-proportional ${trueStr}. This single exposure tracks the target at this concentration (noisier than the HDR average but quantitative).`
+    };
+  }
+  if (rec >= 70) {
+    return {
+      level: "compromised",
+      html: `<strong>${T}&nbsp;s exposure compromised.</strong> Recovery ${recStr}% &mdash; reads ${rs.toFixed(1)} vs target-proportional ${trueStr}. Visibly under-reports the target by ~${(100 - rec).toFixed(0)}%. Benji&rsquo;s HDR would down-weight this frame.`
+    };
+  }
+  return {
+    level: "dead",
+    html: `<strong>${T}&nbsp;s exposure burnt.</strong> Recovery ${recStr}% &mdash; reads ${rs.toFixed(1)} vs target-proportional ${trueStr}. Substrate-limited; Benji&rsquo;s HDR drops this frame entirely. Real fix: rely on shorter exposures or <strong>dilute</strong>.`
+  };
+}
+
 function redraw() {
   const { C, R } = state;
 
@@ -344,26 +438,45 @@ function redraw() {
   };
   Plotly.react("plot", mainTraces, mainLayout, { responsive: true, displayModeBar: false });
 
-  // --- Right panel: Benji's HDR composite ---
+  // --- Right panel: Benji's HDR composite, OR a single exposure when chosen ---
+  let rightYs, rightColor, rightLabel, yAxisTitle;
+  if (state.mode === "hdr") {
+    rightYs = hdrYs;
+    rightColor = "#1f77b4";
+    rightLabel = "Benji’s HDR composite";
+    yAxisTitle = "Counts / second (Benji’s HDR, a.u.)";
+  } else {
+    const expIdx = STD_STACK.indexOf(MODE_T[state.mode]);
+    rightYs = exposureYs[expIdx];
+    rightColor = PALETTE[expIdx % PALETTE.length];
+    rightLabel = `${MODE_T[state.mode]} s exposure`;
+    yAxisTitle = `Counts / second (${MODE_T[state.mode]} s, a.u.)`;
+  }
+
   const hdrTrace = {
     x: XS,
-    y: hdrYs,
+    y: rightYs,
     mode: "lines",
-    line: { width: 1.8, color: "#1f77b4" },
-    name: "Benji’s HDR composite",
+    line: { width: 1.8, color: rightColor },
+    name: rightLabel,
     hovertemplate: "%{x:.1f} kDa<br>%{y:.2f} counts/s<extra></extra>"
   };
   const hdrLayout = {
     margin: { t: 36, l: 64, r: 16, b: 52 },
     xaxis: { title: "MW (kDa)", range: [XMIN, XMAX], zeroline: false },
-    yaxis: { title: "Counts / second (HDR, a.u.)", range: yrange },
+    yaxis: { title: yAxisTitle, range: yrange },
     showlegend: false,
     plot_bgcolor: "white",
     hovermode: "x"
   };
   Plotly.react("plot-hdr", [hdrTrace], hdrLayout, { responsive: true, displayModeBar: false });
 
-  const status = hdrStatusInfo(C, R, weights);
+  document.getElementById("hdr-panel-title").textContent =
+    `${rightLabel} (per second, a.u.)`;
+
+  const status = state.mode === "hdr"
+    ? hdrStatusInfo(C, R, weights)
+    : singleExposureStatus(C, R, MODE_T[state.mode]);
   const el = document.getElementById("hdr-status");
   el.innerHTML = status.html;
   el.dataset.level = status.level;
@@ -414,11 +527,22 @@ document.querySelectorAll(".presets button").forEach(btn => {
     setSliderFromValue("subst", log10pow, p.R);
   });
 });
+
+document.querySelectorAll(".mode-bar button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    state.mode = btn.dataset.mode;
+    document.querySelectorAll(".mode-bar button").forEach(b =>
+      b.classList.toggle("active", b === btn));
+    redraw();
+  });
+});
 </script>
 
 <p style="text-align:center;margin:32px 0 8px;font-size:14px;">
   Ready for more? <a href="samples.html" style="color:#1f77b4;">&rarr; Level 2: standard curve with multiple samples</a>
 </p>
+
+</main>
 
 </body>
 </html>
