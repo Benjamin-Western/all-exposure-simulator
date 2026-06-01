@@ -297,8 +297,8 @@
 <div class="legend-row" style="justify-content: space-between;">
   <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
     <span><span class="swatch" style="background:#2ca02c"></span>Trustworthy</span>
-    <span><span class="swatch" style="background:#ff7f0e"></span>Noisy (short exposures only)</span>
-    <span><span class="swatch" style="background:#d62728"></span>Burnt &mdash; underestimated</span>
+    <span><span class="swatch" style="background:#ff7f0e"></span>Compromised (noisy or partly burnt)</span>
+    <span><span class="swatch" style="background:#d62728"></span>Unreliable (burnt or buried in noise)</span>
   </div>
   <div class="axis-toggle" id="yscale-toggle" style="margin:0;">
     <span style="align-self:center;margin-right:6px;color:#666;">Y-axis:</span>
@@ -430,6 +430,34 @@ function computeSample(sampleIdx, C, R) {
     else if (rec < 90) status = "compromised";
     else status = "good";
   }
+
+  // Peak-SNR check — guards against the "high recovery but buried in noise"
+  // case at extremely low concentrations. Take the worst of (det, SNR).
+  let snr;
+  if (state.mode === "hdr") {
+    let varSum = 0;
+    for (let i = 0; i < STD_STACK.length; i++) {
+      const w = weights[i];
+      if (w <= 0) continue;
+      const rate = perSecond(STD_STACK[i], C, R);
+      varSum += w * w * (rate + BG * BG_MULT) / STD_STACK[i];
+    }
+    const noiseAtPeak = W > 0
+      ? Math.sqrt(varSum) / W * NOISE_SCALE * NOISE_MULT
+      : Infinity;
+    snr = noiseAtPeak > 0 ? r1 / noiseAtPeak : Infinity;
+  } else {
+    const T = MODE_T[state.mode];
+    const rs = perSecond(T, C, R);
+    const noiseAtPeak = Math.sqrt((rs + BG * BG_MULT) / T) * NOISE_SCALE * NOISE_MULT;
+    snr = noiseAtPeak > 0 ? rs / noiseAtPeak : Infinity;
+  }
+  let snrLevel;
+  if (snr < 5)       snrLevel = "dead";
+  else if (snr < 20) snrLevel = "compromised";
+  else               snrLevel = "good";
+  const ORDER = { dead: 0, compromised: 1, good: 2 };
+  if (ORDER[snrLevel] < ORDER[status]) status = snrLevel;
 
   const measured = {
     s1:  integratePeak(exposureYs[0]),
