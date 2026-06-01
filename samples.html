@@ -88,6 +88,26 @@
   .axis-toggle button:last-child  { border-radius: 0 6px 6px 0; border-left: 0; }
   .axis-toggle button.active { background: #1f77b4; color: white; border-color: #1f77b4; }
   .axis-toggle button:not(.active):hover { background: #eef1f6; }
+  .mode-bar {
+    display: flex;
+    gap: 0;
+    font-size: 10px;
+    margin-top: 4px;
+  }
+  .mode-bar button {
+    font: inherit;
+    flex: 1;
+    padding: 3px 4px;
+    border: 1px solid #c8ccd4;
+    background: white;
+    cursor: pointer;
+    color: #555;
+    border-left: 0;
+  }
+  .mode-bar button:first-child { border-radius: 4px 0 0 4px; border-left: 1px solid #c8ccd4; }
+  .mode-bar button:last-child  { border-radius: 0 4px 4px 0; }
+  .mode-bar button.active { background: #1f77b4; color: white; border-color: #1f77b4; }
+  .mode-bar button:not(.active):hover { background: #eef1f6; }
   #curve-plot { width: 100%; height: 320px; margin-bottom: 4px; }
   .legend-row {
     display: flex;
@@ -183,9 +203,18 @@
   </div>
   <div class="ctrl">
     <label>HDR inclusion threshold</label>
-    <div class="hint">Min per-sec ratio (vs 1s) for full HDR inclusion. Smoothstep ramp just below — narrower near 100%, wider at looser thresholds.</div>
+    <div class="hint">Min per-sec ratio (vs 1s) for full HDR inclusion. Or pick a single exposure below to bypass HDR entirely.</div>
     <input id="thresh" type="range" min="0.80" max="1.00" step="0.01" value="0.95">
     <div class="value"><span id="thresh-val">90&ndash;95%</span></div>
+    <div class="mode-bar">
+      <button class="active" data-mode="hdr">HDR</button>
+      <button data-mode="s1">1s</button>
+      <button data-mode="s2">2s</button>
+      <button data-mode="s4">4s</button>
+      <button data-mode="s8">8s</button>
+      <button data-mode="s16">16s</button>
+      <button data-mode="s32">32s</button>
+    </div>
   </div>
 </div>
 
@@ -325,9 +354,18 @@ function computeSample(sampleIdx, C, R) {
 
   const effN = W;
   let status;
-  if (effN <= 2) status = "dead";
-  else if (effN <= 3) status = "compromised";
-  else status = "good";
+  if (state.mode === "hdr") {
+    if (effN <= 2) status = "dead";
+    else if (effN <= 3) status = "compromised";
+    else status = "good";
+  } else {
+    const ideal = LINEAR_SLOPE * C;
+    const measVal = integratePeak(exposureYs[STD_STACK.indexOf(MODE_T[state.mode])]);
+    const rec = ideal > 0 ? measVal / ideal * 100 : 0;
+    if (rec < 70) status = "dead";
+    else if (rec < 90) status = "compromised";
+    else status = "good";
+  }
 
   const measured = {
     s1:  integratePeak(exposureYs[0]),
@@ -369,7 +407,7 @@ function setupGrid() {
           <div id="all-exp-${i}" class="mini-plot"></div>
         </div>
         <div class="mini-pair">
-          <div class="mini-plot-header">HDR composite</div>
+          <div class="mini-plot-header" id="hdr-header-${i}">HDR composite</div>
           <div id="hdr-${i}" class="mini-plot"></div>
         </div>
       </div>
@@ -379,11 +417,14 @@ function setupGrid() {
 }
 setupGrid();
 
-const state = { C0: 100, R: 1, axisType: "log", yScale: "shared", thresh: 0.95 };
+const state = { C0: 100, R: 1, axisType: "log", yScale: "shared", thresh: 0.95, mode: "hdr" };
+const MODE_T = { s1: 1, s2: 2, s4: 4, s8: 8, s16: 16, s32: 32 };
 
 function drawStandardCurve(samples) {
+  const activeArea = s => state.mode === "hdr" ? s.area : s.measured[state.mode];
+  const modeLabel = state.mode === "hdr" ? "HDR" : MODE_T[state.mode] + "s";
   const xs = samples.map(s => s.C);
-  const ys = samples.map(s => s.area);
+  const ys = samples.map(activeArea);
   const colors = samples.map(s => statusColor(s.status));
   const fmtPct = p => p.toFixed(0) + "%";
   const fmtArea = a =>
@@ -416,27 +457,35 @@ function drawStandardCurve(samples) {
              nbpad(wt, wtW, true);
     };
     const w = s.weights;
-    const hdrLine = `<b><span style="color:#1f77b4">` +
-      fmtRow("HDR", s.measured.hdr, "—") +
-      `</span></b>`;
-    const otherLines = [
-      fmtRow("1s",  s.measured.s1,  w[0].toFixed(2)),
-      fmtRow("2s",  s.measured.s2,  w[1].toFixed(2)),
-      fmtRow("4s",  s.measured.s4,  w[2].toFixed(2)),
-      fmtRow("8s",  s.measured.s8,  w[3].toFixed(2)),
-      fmtRow("16s", s.measured.s16, w[4].toFixed(2)),
-      fmtRow("32s", s.measured.s32, w[5].toFixed(2))
+    const activeKey = state.mode;
+    const rowDef = (key, lab, meas, wt) => {
+      const row = fmtRow(lab, meas, wt);
+      return key === activeKey
+        ? `<b><span style="color:#1f77b4">${row}</span></b>`
+        : row;
+    };
+    const allLines = [
+      rowDef("hdr", "HDR", s.measured.hdr, "—"),
+      rowDef("s1",  "1s",  s.measured.s1,  w[0].toFixed(2)),
+      rowDef("s2",  "2s",  s.measured.s2,  w[1].toFixed(2)),
+      rowDef("s4",  "4s",  s.measured.s4,  w[2].toFixed(2)),
+      rowDef("s8",  "8s",  s.measured.s8,  w[3].toFixed(2)),
+      rowDef("s16", "16s", s.measured.s16, w[4].toFixed(2)),
+      rowDef("s32", "32s", s.measured.s32, w[5].toFixed(2))
     ].join("<br>");
 
     return `<b>Sample ${i + 1}</b> — conc &times;${fmtC(s.C)} — ${s.status}` +
-      `<br><span style="font-family:monospace">${header}<br>${hdrLine}<br>${otherLines}</span>`;
+      `<br><span style="font-family:monospace">${header}<br>${allLines}</span>`;
   });
 
   const displayText = samples.map(s => {
     const ideal = LINEAR_SLOPE * s.C;
-    const recHDR = ideal > 0 ? s.measured.hdr / ideal * 100 : 0;
-    const effN = s.weights.reduce((a, b) => a + b, 0);
-    return `HDR ${recHDR.toFixed(0)}%<br>n=${effN.toFixed(1)}`;
+    const rec = ideal > 0 ? activeArea(s) / ideal * 100 : 0;
+    if (state.mode === "hdr") {
+      const effN = s.weights.reduce((a, b) => a + b, 0);
+      return `HDR ${rec.toFixed(0)}%<br>n=${effN.toFixed(1)}`;
+    }
+    return `${modeLabel} ${rec.toFixed(0)}%`;
   });
 
   const isLog = state.axisType === "log";
@@ -460,7 +509,7 @@ function drawStandardCurve(samples) {
     x: xs,
     y: isLog ? ys.map(v => Math.max(v, 1e-6)) : ys,
     mode: "markers+text",
-    name: "Measured (HDR peak area)",
+    name: `Measured (${modeLabel} peak area)`,
     marker: {
       size: 14,
       color: colors,
@@ -520,9 +569,18 @@ function drawMiniAll(sampleIdx, data, yrange) {
 }
 
 function drawMiniHDR(sampleIdx, data, yrange) {
+  let ys, color;
+  if (state.mode === "hdr") {
+    ys = data.hdrYs;
+    color = "#1f77b4";
+  } else {
+    const expIdx = STD_STACK.indexOf(MODE_T[state.mode]);
+    ys = data.exposureYs[expIdx];
+    color = PALETTE[expIdx % PALETTE.length];
+  }
   const trace = {
-    x: XS, y: data.hdrYs, mode: "lines",
-    line: { width: 1.6, color: "#1f77b4" },
+    x: XS, y: ys, mode: "lines",
+    line: { width: 1.6, color },
     hoverinfo: "skip"
   };
   const layout = {
@@ -567,8 +625,13 @@ function redraw() {
     yranges = samples.map(s => [0, sampleMax(s)]);
   }
 
+  const bottomHeader = state.mode === "hdr"
+    ? "HDR composite"
+    : `${MODE_T[state.mode]}s exposure`;
+
   drawStandardCurve(samples);
   samples.forEach((s, i) => {
+    document.getElementById(`hdr-header-${i}`).textContent = bottomHeader;
     drawMiniAll(i, s, yranges[i]);
     drawMiniHDR(i, s, yranges[i]);
   });
@@ -629,6 +692,17 @@ document.querySelectorAll(".axis-toggle").forEach(group => {
         b.classList.toggle("active", b === btn));
       redraw();
     });
+  });
+});
+
+document.querySelectorAll(".mode-bar button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    state.mode = btn.dataset.mode;
+    document.querySelectorAll(".mode-bar button").forEach(b =>
+      b.classList.toggle("active", b === btn));
+    const slider = document.getElementById("thresh");
+    slider.style.opacity = state.mode === "hdr" ? "1" : "0.4";
+    redraw();
   });
 });
 </script>
