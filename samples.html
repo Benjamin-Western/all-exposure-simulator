@@ -8,7 +8,7 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     margin: 24px auto;
-    max-width: 1200px;
+    max-width: 1400px;
     color: #222;
     padding: 0 16px;
   }
@@ -102,39 +102,51 @@
     margin-right: 6px;
     vertical-align: middle;
   }
-  .samples-grid { display: flex; flex-direction: column; gap: 6px; }
-  .sample-row {
+  .samples-grid {
     display: grid;
-    grid-template-columns: 130px 1fr 1fr;
-    gap: 10px;
-    align-items: stretch;
-    padding: 8px 10px;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+  }
+  .sample-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 6px 8px;
     background: #fafbfc;
     border-radius: 6px;
-    border-left: 5px solid transparent;
+    border-top: 5px solid transparent;
+    min-width: 0;
   }
-  .sample-row[data-status="good"]        { border-left-color: #2ca02c; }
-  .sample-row[data-status="compromised"] { border-left-color: #ff7f0e; }
-  .sample-row[data-status="dead"]        { border-left-color: #d62728; }
+  .sample-col[data-status="good"]        { border-top-color: #2ca02c; }
+  .sample-col[data-status="compromised"] { border-top-color: #ff7f0e; }
+  .sample-col[data-status="dead"]        { border-top-color: #d62728; }
   .sample-label {
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    font-size: 13px;
+    align-items: center;
+    text-align: center;
+    font-size: 12px;
+    margin-bottom: 2px;
   }
-  .sample-num { font-weight: 600; color: #222; }
-  .sample-conc { color: #555; font-variant-numeric: tabular-nums; font-size: 12px; margin-top: 2px; }
-  .sample-status-text { font-size: 11px; margin-top: 4px; color: #888; }
+  .sample-num { font-weight: 600; color: #222; font-size: 12px; }
+  .sample-conc { color: #555; font-variant-numeric: tabular-nums; font-size: 11px; margin-top: 1px; }
+  .sample-status-text { font-size: 10px; margin-top: 2px; color: #888; }
   .mini-pair { display: flex; flex-direction: column; min-width: 0; }
   .mini-plot-header {
-    font-size: 10px;
+    font-size: 9px;
     color: #888;
     text-align: center;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .mini-plot { width: 100%; height: 130px; }
+  .mini-plot { width: 100%; height: 140px; }
+  @media (max-width: 1000px) {
+    .samples-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .samples-grid { grid-template-columns: repeat(2, 1fr); }
+  }
 </style>
 </head>
 <body>
@@ -307,7 +319,7 @@ function setupGrid() {
   let html = "";
   for (let i = 0; i < N_SAMPLES; i++) {
     html += `
-      <div class="sample-row" id="row-${i}" data-status="good">
+      <div class="sample-col" id="row-${i}" data-status="good">
         <div class="sample-label">
           <div class="sample-num">Sample ${i + 1}${i === 0 ? " (top)" : ""}</div>
           <div class="sample-conc">true &times;<span id="conc-label-${i}">&hellip;</span></div>
@@ -397,7 +409,7 @@ function drawMiniAll(sampleIdx, data, yrange) {
     hoverinfo: "skip"
   }));
   const layout = {
-    margin: { t: 4, l: 40, r: 6, b: 26 },
+    margin: { t: 4, l: 34, r: 4, b: 24 },
     xaxis: { range: [XMIN, XMAX], tickfont: { size: 9 }, zeroline: false },
     yaxis: { range: yrange, tickfont: { size: 9 } },
     showlegend: false, plot_bgcolor: "white"
@@ -413,7 +425,7 @@ function drawMiniHDR(sampleIdx, data, yrange) {
     hoverinfo: "skip"
   };
   const layout = {
-    margin: { t: 4, l: 40, r: 6, b: 26 },
+    margin: { t: 4, l: 34, r: 4, b: 24 },
     xaxis: { range: [XMIN, XMAX], tickfont: { size: 9 }, zeroline: false },
     yaxis: { range: yrange, tickfont: { size: 9 } },
     showlegend: false, plot_bgcolor: "white"
