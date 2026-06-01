@@ -87,18 +87,6 @@
     line-height: 1.5;
     margin: 8px 2px 0;
   }
-  .hdr-status {
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    margin-bottom: 8px;
-    border: 1px solid transparent;
-    line-height: 1.4;
-  }
-  .hdr-status[data-level="good"]        { background: #e7f5ec; color: #1e6e34; border-color: #b5dec3; }
-  .hdr-status[data-level="compromised"] { background: #fff4e0; color: #92580a; border-color: #f0d199; }
-  .hdr-status[data-level="dead"]        { background: #fdecea; color: #b03a2e; border-color: #ebbcb6; }
   @media (max-width: 880px) {
     .plots { grid-template-columns: 1fr; }
   }
@@ -187,7 +175,7 @@
     <div class="ctrl">
       <label>Sample concentration</label>
       <div class="hint">How much target is in the capillary. The thing we&rsquo;re trying to quantify.</div>
-      <input id="conc" type="range" min="-3" max="4" step="0.04" value="0">
+      <input id="conc" type="range" min="-2" max="4" step="0.04" value="0">
       <div class="value">&times;<span id="conc-val">1.00</span></div>
     </div>
     <div class="ctrl">
@@ -252,7 +240,6 @@
   <div class="panel">
     <div id="plot-hdr"></div>
     <div class="panel-title" id="hdr-panel-title">Benji&rsquo;s HDR composite (per second, a.u.)</div>
-    <div id="hdr-status" class="hdr-status" data-level="good">&hellip;</div>
   </div>
 </div>
 
@@ -293,17 +280,6 @@ const PALETTE = [
 const state = { C: 1, R: 1, noiseMult: 0.1, bgMult: 1, mode: "hdr" };
 const MODE_T = { s1: 1, s2: 2, s4: 4, s8: 8, s16: 16, s32: 32 };
 
-// Peak-area normalisation matching computeSample in level 2 — integral of a
-// unit-height Gaussian over the peak window, used for recovery diagnostics
-// when a single exposure is shown on the right panel.
-let LINEAR_SLOPE = 0;
-const PEAK_INT_LO_LVL1 = 42, PEAK_INT_HI_LVL1 = 50;
-for (let j = 0; j < XS.length; j++) {
-  if (XS[j] >= PEAK_INT_LO_LVL1 && XS[j] <= PEAK_INT_HI_LVL1) {
-    LINEAR_SLOPE += gaussian(XS[j]) * 0.1;
-  }
-}
-
 function gaussian(k) {
   const dx = k - PEAK_KDA;
   return Math.exp(-(dx * dx) / (2 * PEAK_SIGMA * PEAK_SIGMA));
@@ -334,56 +310,6 @@ function noiseStd(rate, T) {
 function fineWeight(ratio) {
   const t = Math.max(0, Math.min(1, (ratio - 0.90) / 0.05));
   return t * t * (3 - 2 * t);
-}
-
-function hdrStatusInfo(C, R, weights) {
-  const r1 = perSecond(1, C, R);
-  const effN = weights.reduce((a, b) => a + b, 0);
-  let lastIdx = 0;
-  for (let i = STD_STACK.length - 1; i >= 0; i--) {
-    if (weights[i] > 0.5) { lastIdx = i; break; }
-  }
-  const bestT = STD_STACK[lastIdx];
-
-  if (effN <= 2) {
-    return {
-      level: "dead",
-      html: `<strong>Benji&rsquo;s HDR dead.</strong> effN = ${effN.toFixed(1)} &mdash; essentially just the 1&nbsp;s exposure (reads ${r1.toFixed(1)} vs target-proportional ${C >= 100 ? C.toFixed(0) : C.toFixed(1)}). No longer exposure agrees, so nothing validates the 1&nbsp;s reading. Real fix: <strong>dilute</strong> or switch to <strong>NIR</strong>.`
-    };
-  }
-  if (effN <= 3) {
-    return {
-      level: "compromised",
-      html: `<strong>Benji&rsquo;s HDR compromised.</strong> Only ~${effN.toFixed(1)} short exposures pass the agreement check (up to ${bestT}&nbsp;s) &mdash; long ones rejected for burnout. Composite quantification still ok but noisier.`
-    };
-  }
-  return {
-    level: "good",
-    html: `<strong>Benji&rsquo;s HDR good.</strong> Effectively averaging ${effN.toFixed(1)} exposures pixel-by-pixel (up to ${bestT}&nbsp;s). Low noise, faithful quantification.`
-  };
-}
-
-function singleExposureStatus(C, R, T) {
-  const rs = perSecond(T, C, R);
-  const rec = C > 0 ? rs / C * 100 : 0;
-  const trueStr = C >= 100 ? C.toFixed(0) : C.toFixed(1);
-  const recStr = rec.toFixed(0);
-  if (rec >= 90) {
-    return {
-      level: "good",
-      html: `<strong>${T}&nbsp;s exposure faithful.</strong> Recovery ${recStr}% &mdash; reads ${rs.toFixed(1)} vs target-proportional ${trueStr}. This single exposure tracks the target at this concentration (noisier than the HDR average but quantitative).`
-    };
-  }
-  if (rec >= 70) {
-    return {
-      level: "compromised",
-      html: `<strong>${T}&nbsp;s exposure compromised.</strong> Recovery ${recStr}% &mdash; reads ${rs.toFixed(1)} vs target-proportional ${trueStr}. Visibly under-reports the target by ~${(100 - rec).toFixed(0)}%. Benji&rsquo;s HDR would down-weight this frame.`
-    };
-  }
-  return {
-    level: "dead",
-    html: `<strong>${T}&nbsp;s exposure burnt.</strong> Recovery ${recStr}% &mdash; reads ${rs.toFixed(1)} vs target-proportional ${trueStr}. Substrate-limited; Benji&rsquo;s HDR drops this frame entirely. Real fix: rely on shorter exposures or <strong>dilute</strong>.`
-  };
 }
 
 function redraw() {
@@ -473,13 +399,6 @@ function redraw() {
 
   document.getElementById("hdr-panel-title").textContent =
     `${rightLabel} (per second, a.u.)`;
-
-  const status = state.mode === "hdr"
-    ? hdrStatusInfo(C, R, weights)
-    : singleExposureStatus(C, R, MODE_T[state.mode]);
-  const el = document.getElementById("hdr-status");
-  el.innerHTML = status.html;
-  el.dataset.level = status.level;
 }
 
 function bindSlider(id, transform, key, format) {
@@ -509,8 +428,7 @@ function setSliderFromValue(id, transform, rawTarget) {
 const idn = v => v;
 const log10pow = v => Math.pow(10, v);
 
-bindSlider("conc", log10pow, "C",
-  v => v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toFixed(3));
+bindSlider("conc", log10pow, "C", v => v >= 100 ? v.toFixed(0) : v.toFixed(2));
 bindSlider("subst", log10pow, "R", v => v.toFixed(2));
 
 const PRESETS = {
