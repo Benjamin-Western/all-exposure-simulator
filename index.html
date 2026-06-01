@@ -187,7 +187,7 @@
     <div class="ctrl">
       <label>Sample concentration</label>
       <div class="hint">How much target is in the capillary. The thing we&rsquo;re trying to quantify.</div>
-      <input id="conc" type="range" min="-1" max="4" step="0.04" value="0">
+      <input id="conc" type="range" min="-3" max="4" step="0.04" value="0">
       <div class="value">&times;<span id="conc-val">1.00</span></div>
     </div>
     <div class="ctrl">
@@ -509,7 +509,8 @@ function setSliderFromValue(id, transform, rawTarget) {
 const idn = v => v;
 const log10pow = v => Math.pow(10, v);
 
-bindSlider("conc", log10pow, "C", v => v >= 100 ? v.toFixed(0) : v.toFixed(2));
+bindSlider("conc", log10pow, "C",
+  v => v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toFixed(3));
 bindSlider("subst", log10pow, "R", v => v.toFixed(2));
 
 const PRESETS = {
