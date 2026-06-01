@@ -252,10 +252,8 @@
       <div class="value">&times;<span id="subst-val">1.00</span></div>
     </div>
     <div class="ctrl">
-      <label>Benji&rsquo;s HDR inclusion threshold</label>
-      <div class="hint">Min per-sec ratio (vs 1s) for full inclusion in Benji&rsquo;s HDR composite. Or pick a single exposure below to bypass HDR entirely.</div>
-      <input id="thresh" type="range" min="0.80" max="1.00" step="0.01" value="0.95">
-      <div class="value"><span id="thresh-val">90&ndash;95%</span></div>
+      <label>Right-panel mode</label>
+      <div class="hint">Default Benji&rsquo;s HDR composite, or override with a single exposure to see what one frame alone gives you.</div>
       <div class="mode-bar">
         <button class="active" data-mode="hdr">HDR</button>
         <button data-mode="s1">1s</button>
@@ -345,14 +343,10 @@ function gaussian(k) {
   return Math.exp(-(dx * dx) / (2 * PEAK_SIGMA * PEAK_SIGMA));
 }
 
-// HDR weight: smoothstep from 0 (at lower) to 1 (at upper).
-// Window width = max(1%, 1 - upper) — narrows as the threshold approaches 100%
-// so strict settings stay tight (e.g. 99-100%) and loose settings get wider.
+// HDR weight: smoothstep from 0 -> 1 as an exposure's per-sec ratio (vs 1 s)
+// goes from 0.90 -> 0.95. Mirrors level 1.
 function fineWeight(ratio) {
-  const upper = state.thresh;
-  const gap = Math.max(0.01, 1 - upper);
-  const lower = upper - gap;
-  const t = Math.max(0, Math.min(1, (ratio - lower) / gap));
+  const t = Math.max(0, Math.min(1, (ratio - 0.90) / 0.05));
   return t * t * (3 - 2 * t);
 }
 
@@ -522,7 +516,7 @@ function setupGrid() {
 }
 setupGrid();
 
-const state = { C0: 100, R: 1, axisType: "log", yScale: "per-sample", thresh: 0.95, mode: "hdr" };
+const state = { C0: 100, R: 1, axisType: "log", yScale: "per-sample", mode: "hdr" };
 const MODE_T = { s1: 1, s2: 2, s4: 4, s8: 8, s16: 16, s32: 32 };
 
 function drawStandardCurve(samples) {
@@ -769,11 +763,6 @@ const log10pow = v => Math.pow(10, v);
 
 bindSlider("conc",  log10pow, "C0", v => v >= 100 ? v.toFixed(0) : v.toFixed(2));
 bindSlider("subst", log10pow, "R",  v => v.toFixed(2));
-bindSlider("thresh", idn, "thresh", v => {
-  const gap = Math.max(0.01, 1 - v);
-  return `${((v - gap) * 100).toFixed(0)}–${(v * 100).toFixed(0)}%`;
-});
-
 const PRESETS = {
   "all-linear": { C0: 1,     R: 1 },
   "mixed":      { C0: 36,    R: 1 },
@@ -807,8 +796,6 @@ document.querySelectorAll(".mode-bar button").forEach(btn => {
     state.mode = btn.dataset.mode;
     document.querySelectorAll(".mode-bar button").forEach(b =>
       b.classList.toggle("active", b === btn));
-    const slider = document.getElementById("thresh");
-    slider.style.opacity = state.mode === "hdr" ? "1" : "0.4";
     redraw();
   });
 });
