@@ -363,35 +363,51 @@ function fineWeight(ratio) {
   return t * t * (3 - 2 * t);
 }
 
-// Mode-parameterised status: worst of deterministic (burnout / recovery) and
-// peak-SNR bands. Used by the right-panel badge and the dynamic-range heatmap.
-//   Deterministic — HDR mode    : effN bands  >3 good, 2<effN<=3 comp, <=2 dead.
-//                   Single mode  : recovery%   >=90 good, 70..90 comp, <70 dead.
-//   SNR (peak)    — both modes   : snr        >=20 good, 5..20 comp, <5 dead.
-function statusFor(mode, C, R) {
+// Inverse-variance HDR weights. fineWeight rejects burnt exposures (-> 0).
+// Among the unburnt, weight w_i = T_i / (rate_i + BG) is the minimum-variance
+// unbiased weighting for per-second values (since var(y_T) = (rate+BG)/T).
+function hdrIvWeights(C, R) {
   const r1 = perSecond(1, C, R);
-  const weights = STD_STACK.map(T => fineWeight(perSecond(T, C, R) / r1));
-  const W = weights.reduce((a, b) => a + b, 0) || 1;
+  const accept = STD_STACK.map(T => fineWeight(perSecond(T, C, R) / r1));
+  const iv = STD_STACK.map((T, i) => {
+    const rate = perSecond(T, C, R);
+    return accept[i] * T / (rate + BG * state.bgMult);
+  });
+  return { accept, iv, r1 };
+}
+
+// Mode-parameterised status: worst of deterministic and peak-SNR bands.
+//   HDR mode    : det uses 1s recovery (HDR's deterministic accuracy is upper-
+//                 bounded by 1s in this model — longer exposures burn more, so
+//                 perSec(T) <= perSec(1) and HDR_value <= 1s_value).
+//   Single mode : det uses that exposure's own recovery vs C.
+//   SNR         : snr >= 20 good, 5..20 comp, < 5 dead. HDR uses the actual
+//                 composite noise std with inverse-variance weights, which in
+//                 the linear regime is NOISE / sqrt(Sum T_i/(rate+BG)) — that
+//                 is where HDR's noise advantage over 1s alone comes from.
+function statusFor(mode, C, R) {
+  const { accept, iv, r1 } = hdrIvWeights(C, R);
+  const W = iv.reduce((a, b) => a + b, 0) || 1;
 
   let det;
   if (mode === "hdr") {
-    const effN = W;
-    if (effN <= 2)      det = "dead";
-    else if (effN <= 3) det = "compromised";
-    else                det = "good";
+    const rec1s = C > 0 ? r1 / C * 100 : 0;
+    if (rec1s < 70)      det = "dead";
+    else if (rec1s < 90) det = "compromised";
+    else                 det = "good";
   } else {
     const T = MODE_T[mode];
     const rec = C > 0 ? perSecond(T, C, R) / C * 100 : 0;
-    if (rec < 70)       det = "dead";
-    else if (rec < 90)  det = "compromised";
-    else                det = "good";
+    if (rec < 70)        det = "dead";
+    else if (rec < 90)   det = "compromised";
+    else                 det = "good";
   }
 
   let snr;
   if (mode === "hdr") {
     let varSum = 0;
     for (let i = 0; i < STD_STACK.length; i++) {
-      const w = weights[i];
+      const w = iv[i];
       if (w <= 0) continue;
       const rate = perSecond(STD_STACK[i], C, R);
       varSum += w * w * (rate + BG * state.bgMult) / STD_STACK[i];
@@ -488,17 +504,17 @@ function redraw() {
     });
   });
 
-  // Smooth HDR weights (ratio of per-sec to the 1 s reading)
-  const r1 = perSecond(1, C, R);
-  const weights = STD_STACK.map(T => fineWeight(perSecond(T, C, R) / r1));
-  const W = weights.reduce((a, b) => a + b, 0) || 1;
+  // Inclusion + inverse-variance weights (see hdrIvWeights). fineWeight rejects
+  // burnt long exposures; among the unburnt, weight by 1/var(y_T) = T/(rate+BG)
+  // for the minimum-variance unbiased composite.
+  const { accept: weights, iv: ivWeights, r1 } = hdrIvWeights(C, R);
+  const W = ivWeights.reduce((a, b) => a + b, 0) || 1;
 
-  // Pixel-wise weighted average across the "fine" exposures
   const hdrYs = XS.map((_, j) => {
     let sum = 0;
     for (let i = 0; i < STD_STACK.length; i++) {
-      if (weights[i] <= 0) continue;
-      sum += weights[i] * exposureYs[i][j];
+      if (ivWeights[i] <= 0) continue;
+      sum += ivWeights[i] * exposureYs[i][j];
     }
     return sum / W;
   });

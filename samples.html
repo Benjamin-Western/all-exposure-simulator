@@ -395,14 +395,22 @@ function computeSample(sampleIdx, C, R) {
   });
 
   const r1 = perSecond(1, C, R);
+  // Inclusion weights (smoothstep on ratio vs 1s) — reject burnt exposures.
   const weights = STD_STACK.map(T => fineWeight(perSecond(T, C, R) / r1));
-  const W = weights.reduce((a, b) => a + b, 0) || 1;
+  // Inverse-variance weights: among the accepted exposures, weight by
+  // 1/var(y_T) = T/(rate+BG). This is the minimum-variance unbiased composite
+  // and gives HDR its real noise advantage over 1s alone.
+  const ivWeights = STD_STACK.map((T, i) => {
+    const rate = perSecond(T, C, R);
+    return weights[i] * T / (rate + BG * BG_MULT);
+  });
+  const W = ivWeights.reduce((a, b) => a + b, 0) || 1;
 
   const hdrYs = XS.map((_, j) => {
     let sum = 0;
     for (let i = 0; i < STD_STACK.length; i++) {
-      if (weights[i] <= 0) continue;
-      sum += weights[i] * exposureYs[i][j];
+      if (ivWeights[i] <= 0) continue;
+      sum += ivWeights[i] * exposureYs[i][j];
     }
     return sum / W;
   });
@@ -416,11 +424,15 @@ function computeSample(sampleIdx, C, R) {
   };
   const area = integratePeak(hdrYs);
 
-  const effN = W;
+  // Deterministic status. In HDR mode the recovery is upper-bounded by 1s's,
+  // since perSec(T,C) <= perSec(1,C) for T>=1 in this burnout model and HDR is
+  // a convex combination over T>=1. Using rec1s here guarantees
+  // HDR.status >= 1s.status by construction.
   let status;
   if (state.mode === "hdr") {
-    if (effN <= 2) status = "dead";
-    else if (effN <= 3) status = "compromised";
+    const rec1s = C > 0 ? r1 / C * 100 : 0;
+    if (rec1s < 70) status = "dead";
+    else if (rec1s < 90) status = "compromised";
     else status = "good";
   } else {
     const ideal = LINEAR_SLOPE * C;
@@ -432,12 +444,13 @@ function computeSample(sampleIdx, C, R) {
   }
 
   // Peak-SNR check — guards against the "high recovery but buried in noise"
-  // case at extremely low concentrations. Take the worst of (det, SNR).
+  // case at extremely low concentrations. HDR uses the actual inv-var
+  // composite noise std = sqrt(Sum w_i^2 var_i) / W.
   let snr;
   if (state.mode === "hdr") {
     let varSum = 0;
     for (let i = 0; i < STD_STACK.length; i++) {
-      const w = weights[i];
+      const w = ivWeights[i];
       if (w <= 0) continue;
       const rate = perSecond(STD_STACK[i], C, R);
       varSum += w * w * (rate + BG * BG_MULT) / STD_STACK[i];
@@ -574,8 +587,8 @@ function drawStandardCurve(samples) {
     const ideal = LINEAR_SLOPE * s.C;
     const rec = ideal > 0 ? activeArea(s) / ideal * 100 : 0;
     if (state.mode === "hdr") {
-      const effN = s.weights.reduce((a, b) => a + b, 0);
-      return `HDR ${rec.toFixed(0)}%<br>n=${effN.toFixed(1)}`;
+      const n = s.weights.filter(w => w > 0.5).length;
+      return `HDR ${rec.toFixed(0)}%<br>n=${n}`;
     }
     return `${modeLabel} ${rec.toFixed(0)}%`;
   });
