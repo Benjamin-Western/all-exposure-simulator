@@ -7,10 +7,15 @@
 <style>
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    margin: 10px auto;
-    max-width: 1400px;
+    margin: 10px;
     color: #222;
-    padding: 0 16px;
+    display: grid;
+    grid-template-columns: 256px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .page-main {
+    min-width: 0;
+    max-width: 1400px;
   }
   h1 { font-size: 20px; margin: 0 0 4px; }
   .lede { color: #555; font-size: 13px; margin-bottom: 6px; line-height: 1.4; }
@@ -108,38 +113,55 @@
   .mode-bar button:last-child  { border-radius: 0 4px 4px 0; }
   .mode-bar button.active { background: #1f77b4; color: white; border-color: #1f77b4; }
   .mode-bar button:not(.active):hover { background: #eef1f6; }
+  .sidebar {
+    position: sticky;
+    top: 10px;
+    align-self: start;
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
   .disclaimer-banner {
-    position: fixed;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 180px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     background: #fff4e0;
     border: 1.5px solid #d99c33;
     border-radius: 8px;
     font-size: 11px;
     color: #6a3d00;
-    line-height: 1.5;
-    z-index: 100;
+    line-height: 1.45;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
   }
   .disclaimer-banner strong {
     display: block;
-    font-size: 12.5px;
+    font-size: 12px;
     color: #92580a;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
-  @media (max-width: 1620px) {
-    .disclaimer-banner {
+  .sidebar .controls {
+    grid-template-columns: 1fr;
+    margin-bottom: 0;
+  }
+  @media (max-width: 1080px) {
+    body {
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
       position: static;
-      transform: none;
-      width: auto;
-      margin: 10px auto 14px;
-      max-width: 800px;
+      max-height: none;
+      overflow-y: visible;
+    }
+    .sidebar .controls {
+      grid-template-columns: repeat(3, 1fr);
     }
   }
-  #curve-plot { width: 100%; height: 320px; margin-bottom: 4px; }
+  @media (max-width: 700px) {
+    .sidebar .controls {
+      grid-template-columns: 1fr;
+    }
+  }
+  #curve-plot { width: 100%; height: 440px; margin-bottom: 4px; }
   .legend-row {
     display: flex;
     gap: 14px;
@@ -210,10 +232,44 @@
 </head>
 <body>
 
-<div class="disclaimer-banner">
-  <strong>Personal project by Benji</strong>
-  NOT an official Bio-Techne / ProteinSimple tool. &ldquo;Benji&rsquo;s HDR&rdquo; is a toy model built for learning and discussion &mdash; not the real instrument software.
-</div>
+<aside class="sidebar">
+  <div class="disclaimer-banner">
+    <strong>Personal project by Benji</strong>
+    NOT an official Bio-Techne / ProteinSimple tool. &ldquo;Benji&rsquo;s HDR&rdquo; is a toy model built for learning and discussion &mdash; not the real instrument software.
+  </div>
+
+  <div class="controls">
+    <div class="ctrl">
+      <label>Top standard concentration</label>
+      <div class="hint">Sample 1 (top). Samples 2&hellip;6 are 1:2 dilutions of this.</div>
+      <input id="conc" type="range" min="-1" max="4" step="0.04" value="2">
+      <div class="value">&times;<span id="conc-val">100</span></div>
+    </div>
+    <div class="ctrl">
+      <label>Substrate reserves <span class="badge">hypothetical</span></label>
+      <div class="hint">Same caveat as level 1: not adjustable in real life. Real fix is dilute or NIR.</div>
+      <input id="subst" type="range" min="-0.5" max="1.5" step="0.02" value="0">
+      <div class="value">&times;<span id="subst-val">1.00</span></div>
+    </div>
+    <div class="ctrl">
+      <label>Benji&rsquo;s HDR inclusion threshold</label>
+      <div class="hint">Min per-sec ratio (vs 1s) for full inclusion in Benji&rsquo;s HDR composite. Or pick a single exposure below to bypass HDR entirely.</div>
+      <input id="thresh" type="range" min="0.80" max="1.00" step="0.01" value="0.95">
+      <div class="value"><span id="thresh-val">90&ndash;95%</span></div>
+      <div class="mode-bar">
+        <button class="active" data-mode="hdr">HDR</button>
+        <button data-mode="s1">1s</button>
+        <button data-mode="s2">2s</button>
+        <button data-mode="s4">4s</button>
+        <button data-mode="s8">8s</button>
+        <button data-mode="s16">16s</button>
+        <button data-mode="s32">32s</button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<main class="page-main">
 
 <h1>Benji&rsquo;s Standard curve simulator <span style="color:#888;font-size:14px;font-weight:normal">(level 2)</span></h1>
 <p class="lede">
@@ -223,36 +279,6 @@
   the line. Burnt samples lie, period.
 </p>
 <a class="nav-link" href="index.html">&larr; back to single-sample simulator</a>
-
-<div class="controls">
-  <div class="ctrl">
-    <label>Top standard concentration</label>
-    <div class="hint">Sample 1 (top). Samples 2&hellip;6 are 1:2 dilutions of this.</div>
-    <input id="conc" type="range" min="-1" max="4" step="0.04" value="2">
-    <div class="value">&times;<span id="conc-val">100</span></div>
-  </div>
-  <div class="ctrl">
-    <label>Substrate reserves <span class="badge">hypothetical</span></label>
-    <div class="hint">Same caveat as level 1: not adjustable in real life. Real fix is dilute or NIR.</div>
-    <input id="subst" type="range" min="-0.5" max="1.5" step="0.02" value="0">
-    <div class="value">&times;<span id="subst-val">1.00</span></div>
-  </div>
-  <div class="ctrl">
-    <label>Benji&rsquo;s HDR inclusion threshold</label>
-    <div class="hint">Min per-sec ratio (vs 1s) for full inclusion in Benji&rsquo;s HDR composite. Or pick a single exposure below to bypass HDR entirely.</div>
-    <input id="thresh" type="range" min="0.80" max="1.00" step="0.01" value="0.95">
-    <div class="value"><span id="thresh-val">90&ndash;95%</span></div>
-    <div class="mode-bar">
-      <button class="active" data-mode="hdr">HDR</button>
-      <button data-mode="s1">1s</button>
-      <button data-mode="s2">2s</button>
-      <button data-mode="s4">4s</button>
-      <button data-mode="s8">8s</button>
-      <button data-mode="s16">16s</button>
-      <button data-mode="s32">32s</button>
-    </div>
-  </div>
-</div>
 
 <div class="presets">
   <button data-preset="all-linear">All linear (top &times;1)</button>
@@ -283,6 +309,8 @@
 
 <div class="samples-grid"></div>
 
+</main>
+
 <script>
 // === MODEL (mirrors index.html) ===
 const STD_STACK = [1, 2, 4, 8, 16, 32, 64, 128, 512];
@@ -292,7 +320,7 @@ const XMIN = 30, XMAX = 60;
 const TAU0 = 100;
 const NOISE_SCALE = 0.13;
 const BG = 0.4;
-const NOISE_MULT = 0.1;
+const NOISE_MULT = 0.2;
 const BG_MULT = 1;
 
 const N_SAMPLES = 6;
