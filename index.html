@@ -119,6 +119,24 @@
   .takeaway p { margin: 0 0 8px; }
   .takeaway p:last-child { margin-bottom: 0; }
   .takeaway .next-link { color: #1f77b4; font-weight: 600; }
+  .dyn-section {
+    margin: 20px 0 0;
+    padding: 14px 18px;
+    background: #fafbfc;
+    border: 1px solid #e3e5ea;
+    border-radius: 8px;
+  }
+  .dyn-section h2 {
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: #222;
+  }
+  .dyn-section .dyn-hint {
+    font-size: 12.5px;
+    color: #555;
+    line-height: 1.55;
+    margin: 0 0 10px;
+  }
   @media (max-width: 880px) {
     .plots { grid-template-columns: 1fr; }
   }
@@ -345,47 +363,45 @@ function fineWeight(ratio) {
   return t * t * (3 - 2 * t);
 }
 
-// Status level: take the WORST of the deterministic (burnout / recovery) check
-// and a peak-SNR check, so low-concentration "good" readings drop to
-// compromised / dead when noise dominates the signal.
-//
+// Mode-parameterised status: worst of deterministic (burnout / recovery) and
+// peak-SNR bands. Used by the right-panel badge and the dynamic-range heatmap.
 //   Deterministic — HDR mode    : effN bands  >3 good, 2<effN<=3 comp, <=2 dead.
 //                   Single mode  : recovery%   >=90 good, 70..90 comp, <70 dead.
 //   SNR (peak)    — both modes   : snr        >=20 good, 5..20 comp, <5 dead.
-function hdrStatusInfo(C, R, weights) {
-  // -- deterministic part --
+function statusFor(mode, C, R) {
+  const r1 = perSecond(1, C, R);
+  const weights = STD_STACK.map(T => fineWeight(perSecond(T, C, R) / r1));
+  const W = weights.reduce((a, b) => a + b, 0) || 1;
+
   let det;
-  if (state.mode === "hdr") {
-    const effN = weights.reduce((a, b) => a + b, 0);
+  if (mode === "hdr") {
+    const effN = W;
     if (effN <= 2)      det = "dead";
     else if (effN <= 3) det = "compromised";
     else                det = "good";
   } else {
-    const T = MODE_T[state.mode];
+    const T = MODE_T[mode];
     const rec = C > 0 ? perSecond(T, C, R) / C * 100 : 0;
     if (rec < 70)       det = "dead";
     else if (rec < 90)  det = "compromised";
     else                det = "good";
   }
 
-  // -- peak-SNR part --
   let snr;
-  if (state.mode === "hdr") {
-    let varSum = 0, W = 0;
+  if (mode === "hdr") {
+    let varSum = 0;
     for (let i = 0; i < STD_STACK.length; i++) {
       const w = weights[i];
       if (w <= 0) continue;
       const rate = perSecond(STD_STACK[i], C, R);
       varSum += w * w * (rate + BG * state.bgMult) / STD_STACK[i];
-      W += w;
     }
     const noiseStd = W > 0
       ? Math.sqrt(varSum) / W * NOISE_SCALE * state.noiseMult
       : Infinity;
-    const r1 = perSecond(1, C, R);
     snr = noiseStd > 0 ? r1 / noiseStd : Infinity;
   } else {
-    const T = MODE_T[state.mode];
+    const T = MODE_T[mode];
     const rs = perSecond(T, C, R);
     const noiseStd = Math.sqrt((rs + BG * state.bgMult) / T) * NOISE_SCALE * state.noiseMult;
     snr = noiseStd > 0 ? rs / noiseStd : Infinity;
@@ -396,9 +412,68 @@ function hdrStatusInfo(C, R, weights) {
   else if (snr < 20) snrLevel = "compromised";
   else               snrLevel = "good";
 
-  // worst of the two
   const order = { dead: 0, compromised: 1, good: 2 };
   return order[snrLevel] < order[det] ? snrLevel : det;
+}
+
+function hdrStatusInfo(C, R, _weights) { return statusFor(state.mode, C, R); }
+
+const DYN_MODES = [
+  { key: "hdr", label: "HDR" },
+  { key: "s1",  label: "1 s" },
+  { key: "s2",  label: "2 s" },
+  { key: "s4",  label: "4 s" },
+  { key: "s8",  label: "8 s" },
+  { key: "s16", label: "16 s" },
+  { key: "s32", label: "32 s" }
+];
+
+function drawDynamicRange() {
+  const N = 100;
+  const logMin = -2, logMax = 4;
+  const cs = [];
+  for (let i = 0; i < N; i++) {
+    cs.push(Math.pow(10, logMin + i * (logMax - logMin) / (N - 1)));
+  }
+  const code = { good: 2, compromised: 1, dead: 0 };
+  const codeLabel = { 2: "good", 1: "compromised", 0: "dead" };
+  const z = DYN_MODES.map(m => cs.map(C => code[statusFor(m.key, C, state.R)]));
+  const text = z.map(row => row.map(v => codeLabel[v]));
+
+  const trace = {
+    type: "heatmap",
+    x: cs,
+    y: DYN_MODES.map(m => m.label),
+    z,
+    text,
+    hoverinfo: "x+y+text",
+    colorscale: [
+      [0.00, "#d62728"],
+      [0.49, "#d62728"],
+      [0.50, "#ff7f0e"],
+      [0.99, "#ff7f0e"],
+      [1.00, "#2ca02c"]
+    ],
+    zmin: 0, zmax: 2,
+    showscale: false,
+    xgap: 0, ygap: 1
+  };
+
+  const layout = {
+    margin: { t: 8, l: 50, r: 16, b: 40 },
+    xaxis: { type: "log", title: "Sample concentration (×)", range: [logMin, logMax] },
+    yaxis: { autorange: "reversed", tickfont: { size: 11, weight: 600 } },
+    plot_bgcolor: "white",
+    shapes: [{
+      type: "line",
+      x0: state.C, x1: state.C,
+      y0: -0.5, y1: DYN_MODES.length - 0.5,
+      xref: "x", yref: "y",
+      line: { color: "#222", width: 2, dash: "dash" }
+    }]
+  };
+
+  Plotly.react("dyn-range", [trace], layout, { responsive: true, displayModeBar: false });
 }
 
 function redraw() {
@@ -493,6 +568,8 @@ function redraw() {
   const badge = document.getElementById("hdr-status");
   badge.textContent = level;
   badge.dataset.level = level;
+
+  drawDynamicRange();
 }
 
 function bindSlider(id, transform, key, format) {
@@ -550,6 +627,21 @@ document.querySelectorAll(".mode-bar button").forEach(btn => {
   });
 });
 </script>
+
+<div class="dyn-section">
+  <h2>Dynamic range across exposures</h2>
+  <p class="dyn-hint">
+    For each option (Benji&rsquo;s HDR + the manual single exposures), the colour
+    band shows the status at every concentration on the current substrate setting:
+    <strong style="color:#1e6e34">green&nbsp;= trustworthy</strong>,
+    <strong style="color:#92580a">orange&nbsp;= compromised</strong>,
+    <strong style="color:#b03a2e">red&nbsp;= unreliable</strong>.
+    The dashed line marks the current concentration. Note how HDR&rsquo;s green
+    stripe extends further on both ends than any single exposure &mdash; that is
+    the dynamic-range advantage.
+  </p>
+  <div id="dyn-range" style="height: 240px;"></div>
+</div>
 
 <div class="takeaway">
   <h2>What this view shows &mdash; and what it doesn&rsquo;t</h2>
