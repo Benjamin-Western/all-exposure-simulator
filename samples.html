@@ -182,6 +182,7 @@
 
 <div class="presets">
   <button data-preset="all-linear">All linear (top &times;1)</button>
+  <button data-preset="mixed">Mixed (top &times;36)</button>
   <button data-preset="top-burnt">Top samples burnt (top &times;100)</button>
   <button data-preset="all-burnt">Everything burnt (top &times;10000)</button>
 </div>
@@ -298,12 +299,14 @@ function computeSample(sampleIdx, C, R) {
     return sum / W;
   });
 
-  let area = 0;
-  for (let j = 0; j < XS.length; j++) {
-    if (XS[j] >= PEAK_INT_LO && XS[j] <= PEAK_INT_HI) {
-      area += hdrYs[j] * 0.1;
+  const integratePeak = ys => {
+    let a = 0;
+    for (let j = 0; j < XS.length; j++) {
+      if (XS[j] >= PEAK_INT_LO && XS[j] <= PEAK_INT_HI) a += ys[j] * 0.1;
     }
-  }
+    return a;
+  };
+  const area = integratePeak(hdrYs);
 
   const fidelity = r1 / C;
   const effN = W;
@@ -312,7 +315,17 @@ function computeSample(sampleIdx, C, R) {
   else if (effN < 2.5) status = "compromised";
   else status = "good";
 
-  return { exposureYs, hdrYs, area, status, C };
+  const measured = {
+    s1:  integratePeak(exposureYs[0]),
+    s2:  integratePeak(exposureYs[1]),
+    s4:  integratePeak(exposureYs[2]),
+    s8:  integratePeak(exposureYs[3]),
+    s16: integratePeak(exposureYs[4]),
+    s32: integratePeak(exposureYs[5]),
+    hdr: area
+  };
+
+  return { exposureYs, hdrYs, area, status, C, measured, weights };
 }
 
 function statusColor(s) {
@@ -358,9 +371,59 @@ function drawStandardCurve(samples) {
   const xs = samples.map(s => s.C);
   const ys = samples.map(s => s.area);
   const colors = samples.map(s => statusColor(s.status));
-  const labels = samples.map((s, i) =>
-    `Sample ${i + 1}<br>True: &times;${fmtC(s.C)}<br>Measured area: ${fmtC(s.area)}<br>${s.status}`
-  );
+  const fmtPct = p => p.toFixed(0) + "%";
+  const fmtArea = a =>
+    a >= 100 ? a.toFixed(0) :
+    a >= 10  ? a.toFixed(1) :
+    a >= 1   ? a.toFixed(2) :
+               a.toFixed(3);
+  const nbpad = (str, n, right) => {
+    str = String(str);
+    const pad = "&nbsp;".repeat(Math.max(0, n - str.length));
+    return right ? pad + str : str + pad;
+  };
+
+  const labels = samples.map((s, i) => {
+    const ideal = LINEAR_SLOPE * s.C;
+    const trueStr = fmtArea(ideal);
+    const labelW = 5, trueW = 9, measW = 11, recW = 9, wtW = 7;
+    const header =
+      nbpad("",         labelW)       +
+      nbpad("True",     trueW, true)  +
+      nbpad("Measured", measW, true)  +
+      nbpad("Recov.",   recW,  true)  +
+      nbpad("Wt.",      wtW,   true);
+    const fmtRow = (lab, meas, wt) => {
+      const rec = ideal > 0 ? meas / ideal * 100 : 0;
+      return nbpad(lab, labelW) +
+             nbpad(trueStr, trueW, true) +
+             nbpad(fmtArea(meas), measW, true) +
+             nbpad(fmtPct(rec), recW, true) +
+             nbpad(wt, wtW, true);
+    };
+    const w = s.weights;
+    const hdrLine = `<b><span style="color:#1f77b4">` +
+      fmtRow("HDR", s.measured.hdr, "—") +
+      `</span></b>`;
+    const otherLines = [
+      fmtRow("1s",  s.measured.s1,  w[0].toFixed(2)),
+      fmtRow("2s",  s.measured.s2,  w[1].toFixed(2)),
+      fmtRow("4s",  s.measured.s4,  w[2].toFixed(2)),
+      fmtRow("8s",  s.measured.s8,  w[3].toFixed(2)),
+      fmtRow("16s", s.measured.s16, w[4].toFixed(2)),
+      fmtRow("32s", s.measured.s32, w[5].toFixed(2))
+    ].join("<br>");
+
+    return `<b>Sample ${i + 1}</b> — conc &times;${fmtC(s.C)} — ${s.status}` +
+      `<br><span style="font-family:monospace">${header}<br>${hdrLine}<br>${otherLines}</span>`;
+  });
+
+  const displayText = samples.map(s => {
+    const ideal = LINEAR_SLOPE * s.C;
+    const recHDR = ideal > 0 ? s.measured.hdr / ideal * 100 : 0;
+    const effN = s.weights.reduce((a, b) => a + b, 0);
+    return `HDR ${recHDR.toFixed(0)}%<br>n=${effN.toFixed(1)}`;
+  });
 
   const isLog = state.axisType === "log";
   const xMin = isLog ? Math.min(...xs) * 0.5 : 0;
@@ -376,18 +439,30 @@ function drawStandardCurve(samples) {
     hoverinfo: "skip"
   };
 
+  const bgTints = { good: "#e7f5ec", compromised: "#fff4e0", dead: "#fdecea" };
+  const bgColors = samples.map(s => bgTints[s.status]);
+
   const measuredTrace = {
     x: xs,
     y: isLog ? ys.map(v => Math.max(v, 1e-6)) : ys,
-    mode: "markers",
+    mode: "markers+text",
     name: "Measured (HDR peak area)",
     marker: {
       size: 14,
       color: colors,
       line: { color: "#222", width: 1 }
     },
-    text: labels,
-    hovertemplate: "%{text}<extra></extra>"
+    text: displayText,
+    textposition: "top right",
+    textfont: { size: 10, color: "#444" },
+    customdata: labels,
+    hovertemplate: "%{customdata}<extra></extra>",
+    hoverlabel: {
+      bgcolor: bgColors,
+      bordercolor: colors,
+      font: { color: "#222" },
+      align: "left"
+    }
   };
 
   const layout = {
@@ -513,6 +588,7 @@ bindSlider("subst", log10pow, "R",  v => v.toFixed(2));
 
 const PRESETS = {
   "all-linear": { C0: 1,     R: 1 },
+  "mixed":      { C0: 36,    R: 1 },
   "top-burnt":  { C0: 100,   R: 1 },
   "all-burnt":  { C0: 10000, R: 1 }
 };
