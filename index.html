@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>All-exposure HDR simulator</title>
+<title>Benji's All-exposure HDR simulator</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   body {
@@ -100,11 +100,47 @@
   .tip { font-size: 13px; color: #555; margin-top: 12px; line-height: 1.55; }
   .tip ul { padding-left: 20px; margin: 6px 0; }
   .tip code { background: #f0f1f4; padding: 1px 4px; border-radius: 3px; }
+  .disclaimer-banner {
+    position: fixed;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 180px;
+    padding: 14px 16px;
+    background: #fff4e0;
+    border: 1.5px solid #d99c33;
+    border-radius: 8px;
+    font-size: 11px;
+    color: #6a3d00;
+    line-height: 1.5;
+    z-index: 100;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  }
+  .disclaimer-banner strong {
+    display: block;
+    font-size: 12.5px;
+    color: #92580a;
+    margin-bottom: 6px;
+  }
+  @media (max-width: 1500px) {
+    .disclaimer-banner {
+      position: static;
+      transform: none;
+      width: auto;
+      margin: 10px auto 14px;
+      max-width: 800px;
+    }
+  }
 </style>
 </head>
 <body>
 
-<h1>All-exposure overlay simulator</h1>
+<div class="disclaimer-banner">
+  <strong>Personal project by Benji</strong>
+  NOT an official Bio-Techne / ProteinSimple tool. &ldquo;Benji&rsquo;s HDR&rdquo; is a toy model built for learning and discussion &mdash; not the real instrument software.
+</div>
+
+<h1>Benji&rsquo;s All-exposure HDR simulator <span style="color:#888;font-size:14px;font-weight:normal">(level 1)</span></h1>
 <p class="lede">
   Toy forward model of the All-Exposures view from the Jess instrument (Compass software).
   Each curve is one exposure (1, 2, 4, &hellip;, 512&nbsp;s) plotted as <em>counts / sec</em>
@@ -241,18 +277,18 @@ function hdrStatusInfo(C, R, weights) {
   if (effN <= 2) {
     return {
       level: "dead",
-      html: `<strong>HDR dead.</strong> effN = ${effN.toFixed(1)} &mdash; essentially just the 1&nbsp;s exposure (reads ${r1.toFixed(1)} vs target-proportional ${C >= 100 ? C.toFixed(0) : C.toFixed(1)}). No longer exposure agrees, so nothing validates the 1&nbsp;s reading. Real fix: <strong>dilute</strong> or switch to <strong>NIR</strong>.`
+      html: `<strong>Benji&rsquo;s HDR dead.</strong> effN = ${effN.toFixed(1)} &mdash; essentially just the 1&nbsp;s exposure (reads ${r1.toFixed(1)} vs target-proportional ${C >= 100 ? C.toFixed(0) : C.toFixed(1)}). No longer exposure agrees, so nothing validates the 1&nbsp;s reading. Real fix: <strong>dilute</strong> or switch to <strong>NIR</strong>.`
     };
   }
   if (effN <= 3) {
     return {
       level: "compromised",
-      html: `<strong>HDR compromised.</strong> Only ~${effN.toFixed(1)} short exposures pass the agreement check (up to ${bestT}&nbsp;s) &mdash; long ones rejected for burnout. Composite quantification still ok but noisier.`
+      html: `<strong>Benji&rsquo;s HDR compromised.</strong> Only ~${effN.toFixed(1)} short exposures pass the agreement check (up to ${bestT}&nbsp;s) &mdash; long ones rejected for burnout. Composite quantification still ok but noisier.`
     };
   }
   return {
     level: "good",
-    html: `<strong>HDR good.</strong> Effectively averaging ${effN.toFixed(1)} exposures pixel-by-pixel (up to ${bestT}&nbsp;s). Low noise, faithful quantification.`
+    html: `<strong>Benji&rsquo;s HDR good.</strong> Effectively averaging ${effN.toFixed(1)} exposures pixel-by-pixel (up to ${bestT}&nbsp;s). Low noise, faithful quantification.`
   };
 }
 
@@ -308,13 +344,13 @@ function redraw() {
   };
   Plotly.react("plot", mainTraces, mainLayout, { responsive: true, displayModeBar: false });
 
-  // --- Right panel: HDR composite ---
+  // --- Right panel: Benji's HDR composite ---
   const hdrTrace = {
     x: XS,
     y: hdrYs,
     mode: "lines",
     line: { width: 1.8, color: "#1f77b4" },
-    name: "HDR composite",
+    name: "Benji’s HDR composite",
     hovertemplate: "%{x:.1f} kDa<br>%{y:.2f} counts/s<extra></extra>"
   };
   const hdrLayout = {

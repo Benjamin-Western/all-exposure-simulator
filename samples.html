@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Standard curve simulator</title>
+<title>Benji's Standard curve simulator</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   body {
@@ -108,6 +108,37 @@
   .mode-bar button:last-child  { border-radius: 0 4px 4px 0; }
   .mode-bar button.active { background: #1f77b4; color: white; border-color: #1f77b4; }
   .mode-bar button:not(.active):hover { background: #eef1f6; }
+  .disclaimer-banner {
+    position: fixed;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 180px;
+    padding: 14px 16px;
+    background: #fff4e0;
+    border: 1.5px solid #d99c33;
+    border-radius: 8px;
+    font-size: 11px;
+    color: #6a3d00;
+    line-height: 1.5;
+    z-index: 100;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  }
+  .disclaimer-banner strong {
+    display: block;
+    font-size: 12.5px;
+    color: #92580a;
+    margin-bottom: 6px;
+  }
+  @media (max-width: 1620px) {
+    .disclaimer-banner {
+      position: static;
+      transform: none;
+      width: auto;
+      margin: 10px auto 14px;
+      max-width: 800px;
+    }
+  }
   #curve-plot { width: 100%; height: 320px; margin-bottom: 4px; }
   .legend-row {
     display: flex;
@@ -179,7 +210,12 @@
 </head>
 <body>
 
-<h1>Standard curve simulator <span style="color:#888;font-size:14px;font-weight:normal">(level 2)</span></h1>
+<div class="disclaimer-banner">
+  <strong>Personal project by Benji</strong>
+  NOT an official Bio-Techne / ProteinSimple tool. &ldquo;Benji&rsquo;s HDR&rdquo; is a toy model built for learning and discussion &mdash; not the real instrument software.
+</div>
+
+<h1>Benji&rsquo;s Standard curve simulator <span style="color:#888;font-size:14px;font-weight:normal">(level 2)</span></h1>
 <p class="lede">
   Six samples in a 1:2 serial dilution. Slide the top-standard concentration and watch the standard curve.
   As long as every sample stays in the linear range, the points sit on the theoretical line.
@@ -202,8 +238,8 @@
     <div class="value">&times;<span id="subst-val">1.00</span></div>
   </div>
   <div class="ctrl">
-    <label>HDR inclusion threshold</label>
-    <div class="hint">Min per-sec ratio (vs 1s) for full HDR inclusion. Or pick a single exposure below to bypass HDR entirely.</div>
+    <label>Benji&rsquo;s HDR inclusion threshold</label>
+    <div class="hint">Min per-sec ratio (vs 1s) for full inclusion in Benji&rsquo;s HDR composite. Or pick a single exposure below to bypass HDR entirely.</div>
     <input id="thresh" type="range" min="0.80" max="1.00" step="0.01" value="0.95">
     <div class="value"><span id="thresh-val">90&ndash;95%</span></div>
     <div class="mode-bar">
@@ -240,8 +276,8 @@
   </div>
   <div class="axis-toggle" id="yscale-toggle" style="margin:0;">
     <span style="align-self:center;margin-right:6px;color:#666;">Y-axis:</span>
-    <button class="active" data-yscale="shared">Shared</button>
-    <button data-yscale="per-sample">Per-sample</button>
+    <button data-yscale="shared">Shared</button>
+    <button class="active" data-yscale="per-sample">Per-sample</button>
   </div>
 </div>
 
@@ -407,7 +443,7 @@ function setupGrid() {
           <div id="all-exp-${i}" class="mini-plot"></div>
         </div>
         <div class="mini-pair">
-          <div class="mini-plot-header" id="hdr-header-${i}">HDR composite</div>
+          <div class="mini-plot-header" id="hdr-header-${i}">Benji&rsquo;s HDR composite</div>
           <div id="hdr-${i}" class="mini-plot"></div>
         </div>
       </div>
@@ -417,7 +453,7 @@ function setupGrid() {
 }
 setupGrid();
 
-const state = { C0: 100, R: 1, axisType: "log", yScale: "shared", thresh: 0.95, mode: "hdr" };
+const state = { C0: 100, R: 1, axisType: "log", yScale: "per-sample", thresh: 0.95, mode: "hdr" };
 const MODE_T = { s1: 1, s2: 2, s4: 4, s8: 8, s16: 16, s32: 32 };
 
 function drawStandardCurve(samples) {
@@ -509,7 +545,9 @@ function drawStandardCurve(samples) {
     x: xs,
     y: isLog ? ys.map(v => Math.max(v, 1e-6)) : ys,
     mode: "markers+text",
-    name: `Measured (${modeLabel} peak area)`,
+    name: state.mode === "hdr"
+      ? "Measured (Benji’s HDR peak area)"
+      : `Measured (${modeLabel} peak area)`,
     marker: {
       size: 14,
       color: colors,
@@ -626,7 +664,7 @@ function redraw() {
   }
 
   const bottomHeader = state.mode === "hdr"
-    ? "HDR composite"
+    ? "Benji’s HDR composite"
     : `${MODE_T[state.mode]}s exposure`;
 
   drawStandardCurve(samples);
