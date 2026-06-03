@@ -113,9 +113,25 @@
   }
   .takeaway h2 {
     font-size: 15px;
-    margin: 0 0 8px;
+    margin: 0;
     color: #222;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
+  .takeaway h2:hover { color: #1f77b4; }
+  .takeaway h2 .chevron {
+    display: inline-block;
+    font-size: 11px;
+    color: #888;
+    transition: transform 0.15s ease;
+    width: 12px;
+  }
+  .takeaway.collapsed h2 .chevron { transform: rotate(-90deg); }
+  .takeaway .takeaway-content { margin-top: 8px; }
+  .takeaway.collapsed .takeaway-content { display: none; }
   .takeaway p { margin: 0 0 8px; }
   .takeaway p:last-child { margin-bottom: 0; }
   .takeaway .next-link { color: #1f77b4; font-weight: 600; }
@@ -128,9 +144,27 @@
   }
   .dyn-section h2 {
     font-size: 15px;
-    margin: 0 0 6px;
+    margin: 0;
     color: #222;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
+  .dyn-section h2:hover { color: #1f77b4; }
+  .dyn-section h2 .chevron {
+    display: inline-block;
+    font-size: 11px;
+    color: #888;
+    transition: transform 0.15s ease;
+    width: 12px;
+  }
+  .dyn-section.collapsed h2 .chevron { transform: rotate(-90deg); }
+  .dyn-section .dyn-content {
+    margin-top: 8px;
+  }
+  .dyn-section.collapsed .dyn-content { display: none; }
   .dyn-section .dyn-hint {
     font-size: 12.5px;
     color: #555;
@@ -294,19 +328,21 @@
   </div>
 </div>
 
-<div class="dyn-section">
-  <h2>Dynamic range across exposures</h2>
-  <p class="dyn-hint">
-    For each option (Benji&rsquo;s HDR + the manual single exposures), the colour
-    band shows the status at every concentration on the current substrate setting:
-    <strong style="color:#1e6e34">green&nbsp;= trustworthy</strong>,
-    <strong style="color:#92580a">orange&nbsp;= compromised</strong>,
-    <strong style="color:#b03a2e">red&nbsp;= unreliable</strong>.
-    The dashed line marks the current concentration. Note how HDR&rsquo;s green
-    stripe extends further on both ends than any single exposure &mdash; that is
-    the dynamic-range advantage.
-  </p>
-  <div id="dyn-range" style="height: 240px;"></div>
+<div class="dyn-section collapsed" id="dyn-section">
+  <h2 id="dyn-toggle"><span class="chevron">&#9662;</span>Dynamic range across exposures</h2>
+  <div class="dyn-content">
+    <p class="dyn-hint">
+      For each option (Benji&rsquo;s HDR + the manual single exposures), the colour
+      band shows the status at every concentration on the current substrate setting:
+      <strong style="color:#1e6e34">green&nbsp;= trustworthy</strong>,
+      <strong style="color:#92580a">orange&nbsp;= compromised</strong>,
+      <strong style="color:#b03a2e">red&nbsp;= unreliable</strong>.
+      The dashed line marks the current concentration. Note how HDR&rsquo;s green
+      stripe extends further on both ends than any single exposure &mdash; that is
+      the dynamic-range advantage.
+    </p>
+    <div id="dyn-range" style="height: 240px;"></div>
+  </div>
 </div>
 
 <script>
@@ -600,7 +636,9 @@ function redraw() {
   badge.textContent = level;
   badge.dataset.level = level;
 
-  drawDynamicRange();
+  if (!document.getElementById("dyn-section").classList.contains("collapsed")) {
+    drawDynamicRange();
+  }
 }
 
 function bindSlider(id, transform, key, format) {
@@ -657,28 +695,42 @@ document.querySelectorAll(".mode-bar button").forEach(btn => {
     redraw();
   });
 });
+
+document.getElementById("dyn-toggle").addEventListener("click", () => {
+  const sec = document.getElementById("dyn-section");
+  const willOpen = sec.classList.contains("collapsed");
+  sec.classList.toggle("collapsed");
+  if (willOpen) drawDynamicRange();
+});
 </script>
 
-<div class="takeaway">
-  <h2>What this view shows &mdash; and what it doesn&rsquo;t</h2>
-  <p>
-    Everything above &mdash; burnout, noise, the per-exposure trade-offs &mdash; is about
-    <strong>one capillary at one concentration</strong>. The status badge flags whether
-    that single reading is faithful: did the substrate hold, is the peak comfortably above noise.
-  </p>
-  <p>
-    What proves an assay actually <em>quantifies</em> the target is <strong>linearity</strong>:
-    a serial dilution across the working range must land on a straight line. Without that
-    you don&rsquo;t know whether a &ldquo;good&rdquo; reading at &times;1 is still good at
-    &times;0.1 or &times;10. <em>Spike &amp; recovery</em>, parallelism, etc.
-    round out the validation suite if you need the formal proof.
-  </p>
-  <p>
-    <a href="samples.html" class="next-link">&rarr; Level 2: standard curve with six samples</a>
-    runs exactly that linearity check &mdash; same single-capillary mechanics, but with
-    a serial dilution so you can see the points walk off the line at the edges.
-  </p>
+<div class="takeaway collapsed" id="takeaway-section">
+  <h2 id="takeaway-toggle"><span class="chevron">&#9662;</span>What this view shows &mdash; and what it doesn&rsquo;t</h2>
+  <div class="takeaway-content">
+    <p>
+      Everything above &mdash; burnout, noise, the per-exposure trade-offs &mdash; is about
+      <strong>one capillary at one concentration</strong>. The status badge flags whether
+      that single reading is faithful: did the substrate hold, is the peak comfortably above noise.
+    </p>
+    <p>
+      What proves an assay actually <em>quantifies</em> the target is <strong>linearity</strong>:
+      a serial dilution across the working range must land on a straight line. Without that
+      you don&rsquo;t know whether a &ldquo;good&rdquo; reading at &times;1 is still good at
+      &times;0.1 or &times;10. <em>Spike &amp; recovery</em>, parallelism, etc.
+      round out the validation suite if you need the formal proof.
+    </p>
+    <p>
+      <a href="samples.html" class="next-link">&rarr; Level 2: standard curve with six samples</a>
+      runs exactly that linearity check &mdash; same single-capillary mechanics, but with
+      a serial dilution so you can see the points walk off the line at the edges.
+    </p>
+  </div>
 </div>
+<script>
+document.getElementById("takeaway-toggle").addEventListener("click", () => {
+  document.getElementById("takeaway-section").classList.toggle("collapsed");
+});
+</script>
 
 </main>
 
