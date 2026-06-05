@@ -292,21 +292,14 @@
 
 <h1>Benji&rsquo;s All-exposure HDR simulator <span style="color:#888;font-size:14px;font-weight:normal">(level 1)</span></h1>
 <p class="lede">
-  Toy forward model of the All-Exposures view from the Jess instrument (Compass software).
-  Each curve is one exposure (1, 2, 4, &hellip;, 512&nbsp;s) plotted as <em>counts / sec</em>
-  (<strong>arbitrary units</strong> &mdash; only the relative shape between curves matters here).
+  Toy model of Jess&rsquo;s All-Exposures view. Each curve is one exposure
+  (1, 2, 4, &hellip;, 512&nbsp;s) in <em>signal / sec-of-exposure</em>.
 </p>
 <p class="lede">
-  What we actually care about is <strong>how much target is in the capillary</strong>; counts/sec is
-  the proxy via the chain: <em>more target &rarr; (primary in excess) more bound primary &rarr;
-  (secondary in excess) more HRP &rarr; (with abundant substrate and the camera in its linear range)
-  proportionally more counts/sec</em>.
-</p>
-<p class="lede">
-  When substrate runs low, the HRP slows mid-exposure, so long exposures report a lower per-sec than short ones.
-  If only the very long frames drop, no harm done &mdash; the short ones still quantify faithfully.
-  But once even the 2&nbsp;s reads below the 1&nbsp;s, we&rsquo;re in <strong>burnout</strong>:
-  at that point we can&rsquo;t even trust the 1&nbsp;s exposure to reflect target amount.
+  Normalizing by exposure time lets us compare curves directly. Long exposures are expected
+  to under-report as substrate depletes mid-reaction, but short exposures should overlay
+  nearly identically. If the 2&nbsp;s drops below the 1&nbsp;s, it&rsquo;s <strong>burnout</strong>:
+  even the 1&nbsp;s is untrustworthy.
 </p>
 
 <div class="presets">
